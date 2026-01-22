@@ -1,312 +1,399 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQueueSocket } from '../hooks/useQueueSocket';
 import { 
-  Monitor, Volume2, RotateCcw, ArrowRight, Settings, 
-  LogOut, UserCircle, History, BarChart3, TrendingUp,
-  Clock, AlertTriangle, Hash
+  LogOut, TrendingUp, Clock, Users,
+  RotateCcw, ChevronRight, Megaphone,
+  Monitor, AlertCircle, Settings, 
+  Menu, X, CheckCircle, AlertTriangle
 } from 'lucide-react';
+
+// --- SHARED COMPONENTS ---
+
+const ConfirmModal = ({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  title, 
+  description, 
+  confirmText = "Confirmar",
+  isDanger = false 
+}: any) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+             {isDanger ? (
+                <div className="p-2 bg-red-100 rounded-full text-red-600"><AlertTriangle className="w-6 h-6" /></div>
+             ) : (
+                <div className="p-2 bg-blue-100 rounded-full text-brand-600"><AlertCircle className="w-6 h-6" /></div>
+             )}
+             <h3 className="text-lg font-bold text-slate-800">{title}</h3>
+          </div>
+          <p className="text-slate-600 text-sm leading-relaxed">{description}</p>
+        </div>
+        <div className="bg-slate-50 p-4 flex justify-end gap-3 border-t border-slate-200">
+          <button onClick={onClose} className="px-4 py-2 text-slate-600 font-bold text-sm hover:bg-slate-200 rounded transition-colors">Cancelar</button>
+          <button 
+            onClick={() => { onConfirm(); onClose(); }} 
+            className={`px-4 py-2 text-white font-bold text-sm rounded shadow-sm transition-colors ${isDanger ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700'}`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ConfigModal = ({ isOpen, onClose, onConfirm, current }: any) => {
+  const [val, setVal] = useState(current);
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 border border-slate-200">
+         <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
+            <Settings className="w-5 h-5 text-slate-500" />
+            Ajuste Manual
+         </h3>
+         <p className="text-sm text-slate-500 mb-4">
+            Digite o número da <strong>última senha</strong> chamada. A próxima chamada será N+1.
+         </p>
+         <input 
+            type="number" 
+            value={val} 
+            onChange={e => setVal(Number(e.target.value))}
+            className="w-full border-2 border-slate-300 rounded-lg p-3 text-2xl font-mono font-bold text-center focus:border-brand-500 outline-none mb-6"
+         />
+         <div className="flex gap-2">
+            <button onClick={onClose} className="flex-1 py-3 text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 rounded-lg">Cancelar</button>
+            <button onClick={() => { onConfirm(val); onClose(); }} className="flex-1 py-3 text-white font-bold bg-brand-600 hover:bg-brand-700 rounded-lg shadow-md">Salvar</button>
+         </div>
+      </div>
+    </div>
+  );
+};
 
 export const SellerDashboard: React.FC = () => {
   const { isConnected, queueState, currentUser, actions } = useQueueSocket();
+  
+  // Login States
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedDesk, setSelectedDesk] = useState('01');
   const [loginError, setLoginError] = useState('');
-  const [elapsedTime, setElapsedTime] = useState(0);
-  
-  // Modals/Inputs
-  const [showRetroactive, setShowRetroactive] = useState(false);
-  const [retroNumber, setRetroNumber] = useState('');
 
-  // Service Timer
-  useEffect(() => {
-    if (!currentUser?.stats.lastCallTime) return;
-    
-    const interval = setInterval(() => {
-      const start = currentUser.stats.lastCallTime || Date.now();
-      const seconds = Math.floor((Date.now() - start) / 1000);
-      setElapsedTime(seconds);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [currentUser?.stats.lastCallTime, queueState.currentTicket]); // Reset when ticket changes
-
-  const formatTime = (totalSeconds: number) => {
-    const min = Math.floor(totalSeconds / 60);
-    const sec = totalSeconds % 60;
-    return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-  };
+  // Interaction States
+  const [modalType, setModalType] = useState<'none' | 'confirmCall' | 'confirmRecall' | 'confirmRevert' | 'config'>('none');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await actions.login({ username, password });
+    setLoginError('');
+    const res = await actions.login({ username, password, desk: selectedDesk });
     if (!res.success) setLoginError(res.message || 'Erro ao entrar');
   };
 
-  const handleRetroactive = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (retroNumber) {
-        actions.callSpecific(parseInt(retroNumber), true);
-        setShowRetroactive(false);
-        setRetroNumber('');
-    }
-  };
-
-  // --- RENDER: LOGIN SCREEN ---
+  // --- LOGIN SCREEN (Enhanced with Desk Selector) ---
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-carbon-900 flex items-center justify-center p-4">
-         <div className="bg-gray-900 w-full max-w-md p-8 rounded-2xl border border-gray-800 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600 to-amber-400"></div>
-            
-            <div className="text-center mb-8">
-               <div className="bg-gray-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-700">
-                  <UserCircle className="w-8 h-8 text-amber-500" />
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
+         <div className="bg-white w-full max-w-md shadow-2xl shadow-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+            <div className="bg-slate-900 p-8 text-center border-b border-slate-800 relative overflow-hidden">
+               <div className="absolute inset-0 bg-brand-900/20 z-0"></div>
+               <div className="relative z-10">
+                  <Monitor className="w-10 h-10 text-brand-500 mx-auto mb-3" />
+                  <h1 className="text-2xl font-bold text-white tracking-tight">AutoParts<span className="text-brand-400">Pro</span></h1>
+                  <p className="text-slate-400 text-xs mt-2 uppercase tracking-widest font-semibold">Acesso Restrito</p>
                </div>
-               <h1 className="text-2xl font-tech font-bold text-white tracking-widest uppercase">Login Vendedor</h1>
-               <p className="text-gray-500 text-sm mt-2">Acesso ao AutoParts System</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Usuário</label>
+            <form onSubmit={handleLogin} className="p-8 space-y-5">
+              
+              <div className="grid grid-cols-1 gap-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">ID Operador</label>
                 <input 
                   type="text" 
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  className="w-full bg-gray-950 border border-gray-800 rounded px-4 py-3 text-white focus:border-amber-500 focus:outline-none transition-colors"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-slate-900 font-medium focus:border-brand-600 focus:ring-1 focus:ring-brand-600 outline-none transition-all"
                   placeholder="Seu usuário"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Senha</label>
+
+              <div className="grid grid-cols-1 gap-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Senha</label>
                 <input 
                   type="password" 
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full bg-gray-950 border border-gray-800 rounded px-4 py-3 text-white focus:border-amber-500 focus:outline-none transition-colors"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-slate-900 font-medium focus:border-brand-600 focus:ring-1 focus:ring-brand-600 outline-none transition-all"
                   placeholder="••••••"
                 />
               </div>
 
+              <div className="grid grid-cols-1 gap-1">
+                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Selecione seu Balcão</label>
+                 <select 
+                    value={selectedDesk} 
+                    onChange={e => setSelectedDesk(e.target.value)}
+                    className="w-full bg-white border-2 border-slate-200 rounded-lg px-4 py-3 text-slate-900 font-bold focus:border-brand-600 outline-none cursor-pointer hover:border-brand-400 transition-colors"
+                 >
+                    {['01', '02', '03', '04', '05'].map(num => (
+                       <option key={num} value={num}>Balcão {num}</option>
+                    ))}
+                 </select>
+              </div>
+
               {loginError && (
-                 <div className="text-red-400 text-xs bg-red-900/20 p-3 rounded border border-red-900/50 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" /> {loginError}
+                 <div className="flex items-start gap-3 text-red-700 bg-red-50 p-4 rounded-lg border border-red-100 text-sm font-medium animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle className="w-5 h-5 shrink-0" />
+                    {loginError}
                  </div>
               )}
 
               <button 
                 type="submit"
-                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded uppercase tracking-wider transition-all mt-4"
+                className="w-full bg-brand-700 hover:bg-brand-800 text-white font-bold py-4 rounded-lg shadow-lg shadow-brand-900/10 transition-transform active:scale-[0.98] uppercase tracking-wide text-sm mt-4 flex items-center justify-center gap-2"
               >
-                Acessar Painel
+                <CheckCircle className="w-4 h-4" /> Iniciar Turno
               </button>
-
-              <div className="text-center mt-6">
-                <p className="text-xs text-gray-600">Usuários teste: vendedor1 / 123</p>
-              </div>
             </form>
          </div>
       </div>
     );
   }
 
-  // --- RENDER: DASHBOARD ---
+  // --- MAIN APP (Sidebar Layout) ---
   return (
-    <div className="min-h-screen bg-carbon-900 text-white font-sans flex flex-col md:flex-row">
+    <div className="h-screen bg-slate-100 font-sans text-slate-900 flex overflow-hidden">
       
-      {/* SIDEBAR (Desktop) / TOPBAR (Mobile) */}
-      <aside className="bg-gray-900 border-r border-gray-800 w-full md:w-64 flex-shrink-0 flex flex-col justify-between">
+      {/* SIDEBAR NAVIGATION */}
+      <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-2xl z-20">
+         <div className="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-950">
+            <span className="font-bold text-lg tracking-tight">AutoParts<span className="text-brand-500">Pro</span></span>
+         </div>
+
          <div className="p-6">
-            <h1 className="text-xl font-tech font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-8">
-               <Monitor className="w-5 h-5 text-amber-500" />
-               AutoParts
-            </h1>
-            
-            <div className="mb-8">
-               <div className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-2">Vendedor</div>
-               <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
-                     <span className="font-bold text-amber-500">{currentUser.desk}</span>
-                  </div>
-                  <div>
-                     <div className="font-bold text-white">{currentUser.name}</div>
-                     <div className="text-xs text-green-500 flex items-center gap-1">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> Online
-                     </div>
-                  </div>
+            <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 mb-6">
+               <div className="text-xs text-slate-400 uppercase tracking-widest mb-1">Operador</div>
+               <div className="font-bold text-lg leading-tight truncate">{currentUser.name}</div>
+               <div className="mt-3 flex items-center gap-2">
+                  <span className="px-2 py-1 bg-brand-900 text-brand-300 rounded text-xs font-bold border border-brand-700">
+                     Balcão {currentUser.desk}
+                  </span>
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Online"></span>
                </div>
             </div>
 
             <nav className="space-y-2">
-               <button className="w-full flex items-center gap-3 px-4 py-3 bg-gray-800/50 text-amber-500 rounded border-l-2 border-amber-500 font-medium text-sm">
-                  <BarChart3 className="w-4 h-4" /> Painel de Chamadas
-               </button>
-               {/* Placeholders for future routes */}
-               <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors text-sm">
-                  <History className="w-4 h-4" /> Histórico Completo
+               <div className="px-3 py-2 bg-slate-800/50 rounded text-sm font-medium text-white flex items-center gap-3 border-l-2 border-brand-500">
+                  <Monitor className="w-4 h-4" /> Painel Principal
+               </div>
+               
+               <button 
+                  onClick={() => setModalType('config')}
+                  className="w-full px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded text-sm font-medium flex items-center gap-3 transition-colors text-left"
+               >
+                  <Settings className="w-4 h-4" /> Ajuste Manual
                </button>
             </nav>
          </div>
 
-         <div className="p-4 border-t border-gray-800">
-             <button onClick={actions.logout} className="flex items-center gap-2 text-gray-500 hover:text-red-400 text-sm transition-colors w-full px-4 py-2">
-                <LogOut className="w-4 h-4" /> Sair do Sistema
-             </button>
+         <div className="mt-auto p-6 border-t border-slate-800">
+            <button 
+               onClick={actions.logout} 
+               className="w-full flex items-center justify-center gap-2 py-3 border border-red-900/50 text-red-400 hover:bg-red-900/20 rounded font-bold text-sm uppercase transition-colors"
+            >
+               <LogOut className="w-4 h-4" /> Encerrar Turno
+            </button>
          </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto">
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 flex flex-col min-w-0">
          
-         {/* Top Stats Row */}
-         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700/50">
-               <div className="text-gray-500 text-xs uppercase font-bold tracking-wider mb-1">Meus Atendimentos (Hoje)</div>
-               <div className="text-3xl font-tech font-bold text-white">{currentUser.stats.today}</div>
+         {/* Top Bar Stats */}
+         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
+            <div className="flex gap-8">
+                <div className="flex items-center gap-3">
+                   <Users className="w-5 h-5 text-slate-400" />
+                   <div>
+                      <span className="text-xs font-bold text-slate-500 uppercase block">Atendimentos</span>
+                      <span className="font-mono font-bold text-slate-800 text-lg">{currentUser.stats.today}</span>
+                   </div>
+                </div>
+                <div className="w-px h-8 bg-slate-100 my-auto"></div>
+                <div className="flex items-center gap-3">
+                   <TrendingUp className="w-5 h-5 text-slate-400" />
+                   <div>
+                      <span className="text-xs font-bold text-slate-500 uppercase block">Total Loja</span>
+                      <span className="font-mono font-bold text-slate-800 text-lg">{queueState.stats.totalCallsToday}</span>
+                   </div>
+                </div>
             </div>
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700/50">
-               <div className="text-gray-500 text-xs uppercase font-bold tracking-wider mb-1">Meus Atendimentos (Mês)</div>
-               <div className="text-3xl font-tech font-bold text-gray-300">{currentUser.stats.month}</div>
+            <div className="text-xs text-slate-400 font-mono">
+               {new Date().toLocaleDateString()}
             </div>
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700/50">
-               <div className="text-gray-500 text-xs uppercase font-bold tracking-wider mb-1">Total Loja (Hoje)</div>
-               <div className="text-3xl font-tech font-bold text-amber-500">{queueState.stats.totalCallsToday}</div>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700/50 relative overflow-hidden">
-               <div className="text-gray-500 text-xs uppercase font-bold tracking-wider mb-1">Tempo de Atendimento</div>
-               <div className={`text-3xl font-mono font-bold ${elapsedTime > 600 ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {formatTime(elapsedTime)}
-               </div>
-               <div className="absolute right-4 top-4 opacity-10">
-                  <Clock className="w-12 h-12" />
-               </div>
-            </div>
-         </div>
+         </header>
 
-         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-auto lg:h-[600px]">
+         {/* Workspace */}
+         <div className="flex-1 p-8 flex gap-8 overflow-hidden bg-slate-50">
             
-            {/* CONTROLLER (Left - 2 Cols) */}
-            <div className="lg:col-span-2 flex flex-col gap-6">
+            {/* ACTION CENTER */}
+            <div className="flex-[3] flex flex-col gap-6">
                
-               {/* Main Call Button */}
-               <button 
-                  onClick={actions.callNext}
-                  className="flex-1 bg-gradient-to-br from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white rounded-3xl shadow-2xl shadow-amber-900/20 border border-amber-500/30 p-8 flex flex-col items-center justify-center gap-4 group transition-all transform hover:scale-[1.01] active:scale-[0.99]"
-               >
-                  <span className="text-amber-200/80 text-sm font-bold uppercase tracking-[0.2em]">Próximo Cliente</span>
-                  <div className="flex items-center gap-6">
-                     <span className="text-8xl font-tech font-bold group-hover:drop-shadow-[0_0_15px_rgba(251,191,36,0.5)] transition-all">
-                        {String(queueState.currentTicket + 1).padStart(3, '0')}
-                     </span>
-                     <ArrowRight className="w-20 h-20 opacity-50 group-hover:opacity-100 group-hover:translate-x-4 transition-all" />
+               {/* Big Card */}
+               <div className="bg-white rounded-xl shadow-card border border-slate-200 flex-1 flex flex-col relative overflow-hidden">
+                  <div className="bg-slate-50/50 px-8 py-4 border-b border-slate-100 flex justify-between items-center">
+                     <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
+                        <Monitor className="w-4 h-4 text-brand-600" />
+                        Status da Fila
+                     </h2>
+                     <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold border border-green-200 flex items-center gap-2">
+                        Sistema Operante
+                     </div>
                   </div>
-                  <div className="mt-4 bg-black/20 px-4 py-1 rounded-full text-xs font-mono text-amber-100/60">
-                     Clique para chamar e iniciar contagem
+
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                     <div className="mb-10 relative">
+                        <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em] mb-4">Senha em Atendimento</p>
+                        <div className="text-[9rem] leading-none font-mono font-bold text-slate-900 tracking-tighter drop-shadow-sm">
+                           {String(queueState.currentTicket).padStart(3, '0')}
+                        </div>
+                        {queueState.lastCalledDesk && (
+                           <div className="absolute -right-24 top-1/2 -translate-y-1/2 flex flex-col gap-1 items-start opacity-50">
+                               <span className="text-[10px] uppercase font-bold">No Balcão</span>
+                               <span className="text-2xl font-bold font-mono">{queueState.lastCalledDesk}</span>
+                           </div>
+                        )}
+                     </div>
+
+                     <div className="w-full max-w-3xl grid grid-cols-5 gap-4">
+                        {/* RECALL */}
+                        <button 
+                           onClick={() => setModalType('confirmRecall')}
+                           className="col-span-2 flex flex-col items-center justify-center p-6 bg-white border-2 border-amber-200 hover:border-amber-400 text-amber-700 rounded-xl hover:shadow-lg transition-all active:scale-[0.99] group"
+                        >
+                           <Megaphone className="w-8 h-8 mb-3 group-hover:scale-110 transition-transform" />
+                           <span className="font-bold text-lg uppercase tracking-tight">Rechamar</span>
+                           <span className="text-xs font-medium opacity-70">Tocar som novamente</span>
+                        </button>
+
+                        {/* CALL NEXT */}
+                        <button 
+                           onClick={() => setModalType('confirmCall')}
+                           className="col-span-3 flex flex-col items-center justify-center p-6 bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-action shadow-brand-500/30 transition-all active:scale-[0.99] group relative border border-brand-500"
+                        >  
+                           <div className="absolute top-4 right-4 bg-brand-800/50 px-2 py-1 rounded text-[10px] font-mono font-bold text-brand-200 border border-brand-500/50">
+                              PRÓX: {String(queueState.currentTicket + 1).padStart(3, '0')}
+                           </div>
+                           <ChevronRight className="w-12 h-12 mb-2 group-hover:translate-x-2 transition-transform" />
+                           <span className="font-bold text-2xl uppercase tracking-wide">Chamar Próximo</span>
+                        </button>
+                     </div>
                   </div>
-               </button>
 
-               {/* Secondary Actions */}
-               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 h-32">
-                  <button 
-                    onClick={actions.recallCurrent}
-                    className="bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-300 hover:text-white transition-colors"
-                  >
-                     <Volume2 className="w-6 h-6" />
-                     <span className="text-xs font-bold uppercase">Rechamar Atual</span>
-                  </button>
-
-                  <button 
-                    onClick={() => setShowRetroactive(true)}
-                    className="bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-300 hover:text-white transition-colors"
-                  >
-                     <Hash className="w-6 h-6" />
-                     <span className="text-xs font-bold uppercase">Senha Retroativa</span>
-                  </button>
-
-                  <button 
-                    onClick={actions.revertPrevious}
-                    className="bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl flex flex-col items-center justify-center gap-2 text-red-400 hover:text-red-300 transition-colors"
-                  >
-                     <RotateCcw className="w-6 h-6" />
-                     <span className="text-xs font-bold uppercase">Corrigir Erro</span>
-                  </button>
+                  <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+                      <button 
+                         onClick={() => setModalType('confirmRevert')}
+                         className="flex items-center gap-2 text-slate-400 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors"
+                      >
+                         <RotateCcw className="w-4 h-4" /> Desfazer Última Ação
+                      </button>
+                  </div>
                </div>
             </div>
 
-            {/* QUEUE VISUALIZER (Right - 1 Col) */}
-            <div className="bg-gray-900 rounded-3xl border border-gray-800 p-6 flex flex-col">
-               <h3 className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-6 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" /> Fluxo da Loja
-               </h3>
-
-               <div className="space-y-4 overflow-y-auto custom-scrollbar flex-1">
-                  {queueState.history.slice(0, 8).map((t, i) => (
-                     <div key={i} className={`flex items-center justify-between p-3 rounded-lg border ${i === 0 ? 'bg-amber-900/10 border-amber-500/30' : 'bg-gray-800/50 border-gray-700/50'}`}>
-                        <div className="flex items-center gap-3">
-                           <div className={`text-xl font-tech font-bold ${i === 0 ? 'text-amber-500' : 'text-gray-400'}`}>
-                              {String(t.number).padStart(3, '0')}
-                           </div>
-                           {t.isRetroactive && (
-                              <span className="text-[10px] bg-gray-700 px-1 rounded text-gray-300">RETRO</span>
-                           )}
-                        </div>
-                        <div className="text-right">
-                           <div className="text-xs text-gray-300 font-bold">Balcão {t.desk}</div>
-                           <div className="text-[10px] text-gray-600">{t.caller || 'Sistema'}</div>
-                        </div>
-                     </div>
-                  ))}
+            {/* HISTORY SIDEBAR */}
+            <div className="flex-[1.5] bg-white rounded-xl shadow-card border border-slate-200 flex flex-col overflow-hidden">
+               <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex justify-between items-center">
+                  <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Histórico</h3>
+                  <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded">Últimos 15</span>
                </div>
 
-               <div className="mt-6 pt-6 border-t border-gray-800">
-                  <div className="flex justify-between items-center text-xs text-gray-500 mb-2">
-                     <span>Tempo Médio Loja</span>
-                     <span>{formatTime(queueState.stats.averageServiceTime)}/atend</span>
-                  </div>
-                  {/* Fake Progress bar for visual */}
-                  <div className="w-full bg-gray-800 rounded-full h-1.5">
-                     <div className="bg-gray-600 h-1.5 rounded-full" style={{ width: '60%' }}></div>
-                  </div>
+               <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
+                  <table className="w-full text-left">
+                     <thead className="bg-slate-50 sticky top-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <tr>
+                           <th className="px-5 py-2">Senha</th>
+                           <th className="px-5 py-2">Mesa</th>
+                           <th className="px-5 py-2 text-right"></th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100">
+                        {queueState.history.slice(0, 15).map((ticket, index) => {
+                           const isMine = ticket.desk === currentUser.desk;
+                           const isCurrent = index === 0;
+                           return (
+                              <tr key={index} className={`hover:bg-slate-50 transition-colors ${isCurrent ? 'bg-brand-50/40' : ''}`}>
+                                 <td className="px-5 py-3">
+                                    <span className={`font-mono font-bold text-lg ${isCurrent ? 'text-brand-600' : 'text-slate-700'}`}>
+                                       {String(ticket.number).padStart(3, '0')}
+                                    </span>
+                                 </td>
+                                 <td className="px-5 py-3">
+                                    <div className="flex flex-col">
+                                       <span className="text-sm font-bold text-slate-600">{ticket.desk}</span>
+                                       {isMine && <span className="text-[10px] text-brand-600 font-bold uppercase">Você</span>}
+                                    </div>
+                                 </td>
+                                 <td className="px-5 py-3 text-right">
+                                    <button 
+                                       onClick={() => actions.callSpecific(ticket.number, true)}
+                                       className="text-slate-300 hover:text-brand-600 p-2 hover:bg-brand-50 rounded transition-all"
+                                       title="Rechamar"
+                                    >
+                                       <Megaphone className="w-4 h-4" />
+                                    </button>
+                                 </td>
+                              </tr>
+                           );
+                        })}
+                     </tbody>
+                  </table>
+                  {queueState.history.length === 0 && (
+                     <div className="p-8 text-center text-slate-400 text-xs uppercase font-medium">
+                        Sem chamadas hoje
+                     </div>
+                  )}
                </div>
             </div>
          </div>
       </main>
 
-      {/* MODAL RETROACTIVE */}
-      {showRetroactive && (
-         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-gray-900 w-full max-w-sm p-6 rounded-2xl border border-gray-700 shadow-2xl">
-               <h3 className="text-lg font-bold text-white mb-4">Chamar Senha Retroativa</h3>
-               <p className="text-sm text-gray-400 mb-6">Isso exibirá a senha na TV sem alterar a contagem principal da fila.</p>
-               
-               <form onSubmit={handleRetroactive}>
-                  <input 
-                     type="number" 
-                     value={retroNumber}
-                     onChange={e => setRetroNumber(e.target.value)}
-                     className="w-full bg-gray-950 border border-gray-700 rounded-lg p-4 text-2xl font-tech font-bold text-center text-white focus:border-amber-500 outline-none mb-6"
-                     placeholder="000"
-                     autoFocus
-                  />
-                  <div className="flex gap-3">
-                     <button 
-                        type="button" 
-                        onClick={() => setShowRetroactive(false)}
-                        className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-lg font-bold text-sm"
-                     >
-                        Cancelar
-                     </button>
-                     <button 
-                        type="submit" 
-                        className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-3 rounded-lg font-bold text-sm"
-                     >
-                        Chamar
-                     </button>
-                  </div>
-               </form>
-            </div>
-         </div>
-      )}
+      {/* --- MODALS --- */}
+      <ConfirmModal 
+         isOpen={modalType === 'confirmCall'}
+         onClose={() => setModalType('none')}
+         onConfirm={actions.callNext}
+         title="Chamar Próxima Senha"
+         description={`Confirma a chamada da senha ${String(queueState.currentTicket + 1).padStart(3, '0')}? Certifique-se que o atendimento anterior foi finalizado.`}
+         confirmText="Sim, Chamar"
+      />
+      <ConfirmModal 
+         isOpen={modalType === 'confirmRecall'}
+         onClose={() => setModalType('none')}
+         onConfirm={actions.recallCurrent}
+         title="Rechamar Senha Atual"
+         description="Isso tocará o sinal sonoro novamente na TV. Confirma?"
+         confirmText="Rechamar"
+      />
+      <ConfirmModal 
+         isOpen={modalType === 'confirmRevert'}
+         onClose={() => setModalType('none')}
+         onConfirm={actions.revertPrevious}
+         title="Desfazer Ação"
+         description="Isso voltará a contagem para a senha anterior. Use apenas em caso de erro de clique."
+         confirmText="Desfazer"
+         isDanger={true}
+      />
+      <ConfigModal
+         isOpen={modalType === 'config'}
+         onClose={() => setModalType('none')}
+         onConfirm={actions.setTicketNumber}
+         current={queueState.currentTicket}
+      />
 
     </div>
   );
