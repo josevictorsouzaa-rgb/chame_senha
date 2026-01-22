@@ -17,13 +17,27 @@ export default defineConfig({
     port: 3000,
     host: true,
     strictPort: true,
-    cors: true
+    cors: true,
+    proxy: {
+      '/socket.io': {
+        target: 'http://localhost:3001',
+        ws: true,
+        changeOrigin: true
+      }
+    }
   },
   preview: {
     port: 3000,
     host: true,
     strictPort: true,
-    cors: true
+    cors: true,
+    proxy: {
+      '/socket.io': {
+        target: 'http://localhost:3001',
+        ws: true,
+        changeOrigin: true
+      }
+    }
   },
   build: {
     target: 'es2015',

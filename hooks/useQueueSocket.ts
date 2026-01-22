@@ -2,13 +2,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { QueueState, User, AuthResponse, LoginPayload, AnalyticsData, MusicState } from '../types';
 
-// DYNAMIC SERVER URL
-const getSocketUrl = () => {
-  const protocol = window.location.protocol;
-  const hostname = window.location.hostname;
-  return `${protocol}//${hostname}:3001`;
-};
-
 export const useQueueSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [queueState, setQueueState] = useState<QueueState>({
@@ -24,13 +17,16 @@ export const useQueueSocket = () => {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const serverUrl = getSocketUrl();
-    console.log('Connecting to socket at:', serverUrl);
+    console.log('Connecting to socket...');
     
-    socketRef.current = io(serverUrl, {
+    // Connect to relative path. 
+    // In Dev: Vite proxies /socket.io to localhost:3001
+    // In Prod: Server hosts both frontend and socket on same port.
+    socketRef.current = io(undefined, {
         transports: ['websocket', 'polling'],
-        reconnectionAttempts: 10, 
-        timeout: 20000
+        reconnectionAttempts: 20, 
+        timeout: 20000,
+        autoConnect: true
     });
 
     const socket = socketRef.current;
@@ -42,7 +38,7 @@ export const useQueueSocket = () => {
     });
 
     socket.on('connect_error', (err) => {
-        console.error('Socket Connection Error:', err);
+        console.error('Socket Connection Error:', err.message);
     });
 
     socket.on('disconnect', () => setIsConnected(false));
@@ -83,8 +79,7 @@ export const useQueueSocket = () => {
   const logout = () => {
       setCurrentUser(null);
       if (socketRef.current) socketRef.current.disconnect();
-      const serverUrl = getSocketUrl();
-      socketRef.current = io(serverUrl);
+      socketRef.current = io(undefined);
   };
 
   const callNext = useCallback(() => {
