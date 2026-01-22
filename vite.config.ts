@@ -15,14 +15,15 @@ export default defineConfig({
   ],
   server: {
     port: 3000,
-    host: true,
+    host: true, // Listen on all addresses (0.0.0.0)
     strictPort: true,
     cors: true,
     proxy: {
       '/socket.io': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001', // Use IPv4 loopback explicitly
         ws: true,
-        changeOrigin: true
+        changeOrigin: true,
+        secure: false,
       }
     }
   },
@@ -33,9 +34,10 @@ export default defineConfig({
     cors: true,
     proxy: {
       '/socket.io': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         ws: true,
-        changeOrigin: true
+        changeOrigin: true,
+        secure: false,
       }
     }
   },

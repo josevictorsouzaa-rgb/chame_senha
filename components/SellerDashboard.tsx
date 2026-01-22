@@ -6,7 +6,8 @@ import {
   Monitor, AlertCircle, Settings, 
   Menu, X, CheckCircle, AlertTriangle,
   BarChart3, Trophy, Calendar, LayoutDashboard,
-  Music, Play, Pause, Square, Link as LinkIcon, Volume2
+  Music, Play, Pause, Square, Link as LinkIcon, Volume2,
+  SkipForward, SkipBack
 } from 'lucide-react';
 import { AnalyticsData } from '../types';
 
@@ -79,32 +80,48 @@ const ConfigModal = ({ isOpen, onClose, onConfirm, current }: any) => {
 };
 
 // --- MUSIC PLAYER COMPONENT ---
-const MusicController = ({ musicState, onSetMusic }: any) => {
+const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
    const [url, setUrl] = useState('');
    const [loading, setLoading] = useState(false);
 
-   const extractId = (link: string) => {
-      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-      const match = link.match(regExp);
-      return (match && match[2].length === 11) ? match[2] : null;
+   const extractIds = (link: string) => {
+      const vidReg = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+      const listReg = /[?&]list=([^#&?]+)/;
+      
+      const vidMatch = link.match(vidReg);
+      const listMatch = link.match(listReg);
+
+      return {
+          videoId: (vidMatch && vidMatch[2].length === 11) ? vidMatch[2] : null,
+          playlistId: listMatch ? listMatch[1] : null
+      };
    };
 
    const handlePlay = async () => {
-      const id = extractId(url);
-      if (!id) return;
+      const { videoId, playlistId } = extractIds(url);
+      if (!videoId && !playlistId) return;
       
       setLoading(true);
       try {
-         // Fetch oEmbed data for title/thumb without api key
-         const res = await fetch(`https://noembed.com/embed?url=${url}`);
-         const data = await res.json();
+         // If it's a playlist, we might not get thumbnail easily via noembed without a specific video ID
+         // If we have videoId, fetch that. If only playlist, generic thumbnail.
+         let title = 'Playlist YouTube';
+         let thumbnail = 'https://img.youtube.com/vi/default/hqdefault.jpg';
+
+         if (videoId) {
+            const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
+            const data = await res.json();
+            title = data.title || title;
+            thumbnail = data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/0.jpg`;
+         }
          
          onSetMusic({
-            videoId: id,
-            title: data.title || 'Música YouTube',
-            thumbnail: data.thumbnail_url || `https://img.youtube.com/vi/${id}/0.jpg`,
+            videoId: videoId,
+            playlistId: playlistId,
+            title: title + (playlistId ? ' (Playlist)' : ''),
+            thumbnail: thumbnail,
             isPlaying: true,
-            volume: 50 // Default volume
+            volume: 50
          });
          setUrl('');
       } catch (e) {
@@ -118,6 +135,8 @@ const MusicController = ({ musicState, onSetMusic }: any) => {
       onSetMusic({ volume: Number(e.target.value) });
    };
 
+   const hasActiveMedia = musicState.videoId || musicState.playlistId;
+
    return (
       <div className="bg-white rounded-xl shadow-card border border-slate-200 p-5 mt-6">
          <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide flex items-center gap-2 mb-4">
@@ -125,7 +144,7 @@ const MusicController = ({ musicState, onSetMusic }: any) => {
             Som Ambiente (TV)
          </h3>
 
-         {musicState.videoId ? (
+         {hasActiveMedia ? (
             <div className="flex flex-col gap-4">
                <div className="flex items-center gap-4">
                   <img src={musicState.thumbnail} className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
@@ -143,18 +162,36 @@ const MusicController = ({ musicState, onSetMusic }: any) => {
                   </div>
                   <div className="flex gap-2">
                      <button 
-                        onClick={() => onSetMusic({ isPlaying: !musicState.isPlaying })}
-                        className="p-3 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-700 transition-colors"
-                     >
-                        {musicState.isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                     </button>
+                        onClick={() => onCommand('play')} // Just generic command for now, usually updates state
+                        className="hidden"
+                     ></button>
                      <button 
-                        onClick={() => onSetMusic({ videoId: null, isPlaying: false })}
+                        onClick={() => onSetMusic({ videoId: null, playlistId: null, isPlaying: false })}
                         className="p-3 bg-red-50 hover:bg-red-100 rounded-full text-red-600 transition-colors"
+                        title="Parar Música"
                      >
                         <Square className="w-5 h-5" />
                      </button>
                   </div>
+               </div>
+
+               {/* Controls */}
+               <div className="flex justify-center gap-4 py-2 border-t border-b border-slate-100">
+                    <button onClick={() => onCommand('prev')} className="p-2 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-lg">
+                        <SkipBack className="w-6 h-6" />
+                    </button>
+                    <button 
+                        onClick={() => {
+                            if (musicState.isPlaying) onCommand('pause');
+                            else onCommand('play');
+                        }} 
+                        className={`p-2 rounded-full ${musicState.isPlaying ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}
+                    >
+                        {musicState.isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+                    </button>
+                    <button onClick={() => onCommand('next')} className="p-2 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-lg">
+                        <SkipForward className="w-6 h-6" />
+                    </button>
                </div>
                
                {/* Volume Control */}
@@ -177,7 +214,7 @@ const MusicController = ({ musicState, onSetMusic }: any) => {
                   type="text" 
                   value={url}
                   onChange={e => setUrl(e.target.value)}
-                  placeholder="Cole o link do YouTube aqui..."
+                  placeholder="Cole link do vídeo ou playlist..."
                   className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-500 outline-none"
                />
                <button 
@@ -559,7 +596,7 @@ export const SellerDashboard: React.FC = () => {
                {/* HISTORY & MUSIC SIDEBAR */}
                <div className="flex-[1.5] flex flex-col gap-6">
                    {/* MUSIC CONTROLLER */}
-                   <MusicController musicState={queueState.music} onSetMusic={actions.setMusic} />
+                   <MusicController musicState={queueState.music} onSetMusic={actions.setMusic} onCommand={actions.sendPlayerCommand} />
 
                    <div className="flex-1 bg-white rounded-xl shadow-card border border-slate-200 flex flex-col overflow-hidden">
                       <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex justify-between items-center">

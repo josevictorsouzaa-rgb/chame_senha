@@ -1,3 +1,4 @@
+
 export interface User {
   id: string;
   username: string;
@@ -20,11 +21,13 @@ export interface Ticket {
 }
 
 export interface MusicState {
-  videoId: string | null;
+  videoId: string | null; // Used for single video OR fallback
+  playlistId: string | null; // New: Supports playlists
   title: string;
   thumbnail: string;
   isPlaying: boolean;
   volume: number; // 0-100
+  lastCommand?: { type: 'next' | 'prev' | 'pause' | 'play', timestamp: number }; // For remote control
 }
 
 export interface QueueState {
@@ -74,6 +77,7 @@ export interface ClientEvents {
   'setTicketNumber': (number: number) => void; // New: Manual sync
   'getAnalytics': (userId: string, callback: (data: AnalyticsData) => void) => void;
   'setMusic': (music: Partial<MusicState>) => void;
+  'playerControl': (action: 'next' | 'prev' | 'play' | 'pause') => void;
 }
 
 export interface SocketEvents {
@@ -81,4 +85,5 @@ export interface SocketEvents {
   'update': (state: QueueState & { recall?: boolean }) => void;
   'user_update': (user: User) => void;
   'error': (msg: string) => void;
+  'player_command': (action: 'next' | 'prev' | 'play' | 'pause') => void;
 }

@@ -34,6 +34,7 @@ let db = {
   // Default music state
   music: {
     videoId: null,
+    playlistId: null,
     title: '',
     thumbnail: '',
     isPlaying: false,
@@ -260,6 +261,17 @@ io.on('connection', (socket) => {
     io.emit('update', getPublicState());
   });
 
+  socket.on('playerControl', (action) => {
+    // Broadcast the command to all clients (specifically for the TV to hear)
+    io.emit('player_command', action);
+    
+    // Also update server state for play/pause consistency
+    if (action === 'pause') db.music.isPlaying = false;
+    if (action === 'play') db.music.isPlaying = true;
+    // Note: Next/Prev track logic is handled client-side on TV via YouTube API
+    saveData();
+  });
+
   socket.on('getAnalytics', (userId, callback) => {
     const stats = calculateAnalytics(userId);
     callback(stats);
@@ -370,6 +382,7 @@ if (fs.existsSync(distPath)) {
 }
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+// Listen on 0.0.0.0 for external access
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });

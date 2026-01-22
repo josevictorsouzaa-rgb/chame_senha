@@ -9,7 +9,6 @@ const WeatherWidget: React.FC = () => {
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        // Coordinates for Piracicaba, SP: -22.7253, -47.6492
         const res = await fetch(
           'https://api.open-meteo.com/v1/forecast?latitude=-22.7253&longitude=-47.6492&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=America%2FSao_Paulo'
         );
@@ -21,7 +20,7 @@ const WeatherWidget: React.FC = () => {
     };
 
     fetchWeather();
-    const interval = setInterval(fetchWeather, 600000); // Update every 10 mins
+    const interval = setInterval(fetchWeather, 600000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -41,12 +40,11 @@ const WeatherWidget: React.FC = () => {
     return "Instável";
   };
 
-  if (!weather) return <div className="text-slate-500 text-xs">Carregando tempo...</div>;
+  if (!weather) return <div className="text-slate-500 text-xs">...</div>;
 
   const currentTemp = Math.round(weather.current.temperature_2m);
   const currentCode = weather.current.weather_code;
   
-  // Forecast for next 3 days
   const daily = weather.daily;
   const days = daily.time.slice(1, 4).map((t: string, i: number) => {
     const date = new Date(t);
@@ -59,31 +57,27 @@ const WeatherWidget: React.FC = () => {
   });
 
   return (
-    <div className="flex flex-col bg-slate-900/60 backdrop-blur-md rounded-2xl p-4 border border-slate-700/50 shadow-lg h-full justify-between">
-       <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-brand-300">
-             <MapPin className="w-4 h-4" />
-             <span className="text-xs font-bold uppercase tracking-widest">Piracicaba, SP</span>
-          </div>
+    <div className="flex flex-col bg-slate-900/60 backdrop-blur-md rounded-xl p-3 border border-slate-700/50 shadow-lg h-full justify-between">
+       <div className="flex items-center gap-1.5 text-brand-300 mb-1">
+          <MapPin className="w-3 h-3" />
+          <span className="text-[10px] font-bold uppercase tracking-widest">Piracicaba, SP</span>
        </div>
        
-       <div className="flex items-center gap-4 mb-2">
+       <div className="flex items-center gap-3">
           <div className="animate-pulse-slow">
-            {getWeatherIcon(currentCode, "w-12 h-12")}
+            {getWeatherIcon(currentCode, "w-8 h-8")}
           </div>
           <div className="flex flex-col">
-             <span className="text-5xl font-bold text-white tracking-tighter leading-none">{currentTemp}°</span>
-             <span className="text-[10px] text-slate-300 font-bold uppercase tracking-wide mt-1">{getWeatherLabel(currentCode)}</span>
+             <span className="text-3xl font-bold text-white tracking-tighter leading-none">{currentTemp}°</span>
+             <span className="text-[9px] text-slate-300 font-bold uppercase tracking-wide">{getWeatherLabel(currentCode)}</span>
           </div>
        </div>
        
-       {/* 3 Day Forecast */}
-       <div className="grid grid-cols-3 gap-1 pt-3 border-t border-slate-700/50">
+       <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-700/50 mt-1">
           {days.map((d: any, i: number) => (
              <div key={i} className="flex flex-col items-center justify-center p-1 rounded bg-slate-800/40">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">{d.name}</span>
-                <div className="my-1">{getWeatherIcon(d.code, "w-4 h-4")}</div>
-                <span className="text-xs font-bold text-white">{d.max}°</span>
+                <span className="text-[8px] font-bold text-slate-400 uppercase">{d.name}</span>
+                <span className="text-[10px] font-bold text-white">{d.max}°</span>
              </div>
           ))}
        </div>
@@ -99,68 +93,133 @@ const DigitalClock: React.FC = () => {
   }, []);
 
   return (
-    <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl p-4 border border-slate-700/50 shadow-lg text-center h-full flex flex-col justify-center">
-      <div className="text-[6vh] font-sans font-bold text-white tracking-tight leading-none tabular-nums">
+    <div className="bg-slate-900/60 backdrop-blur-md rounded-xl p-3 border border-slate-700/50 shadow-lg text-center h-full flex flex-col justify-center">
+      <div className="text-[4vh] font-sans font-bold text-white tracking-tight leading-none tabular-nums">
         {time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
       </div>
-      <div className="text-brand-400 text-xs font-bold uppercase tracking-[0.2em] mt-1">
+      <div className="text-brand-400 text-[1vh] font-bold uppercase tracking-[0.2em] mt-1">
         {time.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
       </div>
     </div>
   );
 };
 
-// --- YOUTUBE BACKGROUND PLAYER WITH DUCKING ---
-const MusicPlayer = ({ videoId, isPlaying, volume, ducking }: { videoId: string | null, isPlaying: boolean, volume: number, ducking: boolean }) => {
-   const playerRef = useRef<HTMLIFrameElement>(null);
+// --- YOUTUBE PLAYER WITH PLAYLIST SUPPORT & REMOTE CONTROL ---
+declare global {
+    interface Window {
+        YT: any;
+        onYouTubeIframeAPIReady: () => void;
+    }
+}
+
+const MusicPlayer = ({ 
+    videoId, 
+    playlistId,
+    isPlaying, 
+    volume, 
+    ducking, 
+    command 
+}: { 
+    videoId: string | null, 
+    playlistId: string | null,
+    isPlaying: boolean, 
+    volume: number, 
+    ducking: boolean,
+    command: { action: string, timestamp: number } | null
+}) => {
+   const playerRef = useRef<any>(null);
    const currentVolRef = useRef(volume);
 
-   // Volume Smoothing Logic
+   // Load YouTube API
    useEffect(() => {
-      if (!playerRef.current || !videoId) return;
-      const iframe = playerRef.current;
-      if (!iframe.contentWindow) return;
+       if (!window.YT) {
+           const tag = document.createElement('script');
+           tag.src = "https://www.youtube.com/iframe_api";
+           const firstScriptTag = document.getElementsByTagName('script')[0];
+           firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+       }
 
-      const targetVolume = ducking ? 5 : volume; // Drop to 5% on ducking (agressive)
+       window.onYouTubeIframeAPIReady = () => {
+           // Ready state logic handled in init effect
+       };
+   }, []);
+
+   // Initialize or Update Player
+   useEffect(() => {
+       if (!window.YT || (!videoId && !playlistId)) return;
+
+       if (!playerRef.current) {
+           playerRef.current = new window.YT.Player('yt-player-frame', {
+               height: '1',
+               width: '1',
+               playerVars: {
+                   'playsinline': 1,
+                   'controls': 0,
+                   'disablekb': 1,
+                   'fs': 0,
+                   'rel': 0, // Minimize related videos
+                   'modestbranding': 1,
+                   'listType': playlistId ? 'playlist' : undefined,
+                   'list': playlistId
+               },
+               events: {
+                   'onReady': (event: any) => {
+                       if (isPlaying) event.target.playVideo();
+                       event.target.setVolume(volume);
+                   }
+               }
+           });
+       } else {
+           // If IDs change
+           const player = playerRef.current;
+           if (playlistId) {
+               player.loadPlaylist({ list: playlistId, listType: 'playlist' });
+           } else if (videoId) {
+               player.loadVideoById(videoId);
+           }
+       }
+   }, [videoId, playlistId]); // Only re-init if content source changes
+
+   // Handle Remote Commands
+   useEffect(() => {
+       if (!playerRef.current || !command) return;
+       const player = playerRef.current;
+       
+       if (typeof player.playVideo !== 'function') return;
+
+       switch(command.action) {
+           case 'play': player.playVideo(); break;
+           case 'pause': player.pauseVideo(); break;
+           case 'next': player.nextVideo(); break;
+           case 'prev': player.previousVideo(); break;
+       }
+   }, [command]);
+
+   // Handle Volume Ducking
+   useEffect(() => {
+      if (!playerRef.current || typeof playerRef.current.setVolume !== 'function') return;
+      
+      const targetVolume = ducking ? 5 : volume;
+      const player = playerRef.current;
       
       const fadeInterval = setInterval(() => {
          const diff = targetVolume - currentVolRef.current;
          if (Math.abs(diff) < 2) {
             currentVolRef.current = targetVolume;
          } else {
-            currentVolRef.current += diff * 0.1; // Smooth fade factor
+            currentVolRef.current += diff * 0.15; 
          }
-
-         iframe.contentWindow?.postMessage(JSON.stringify({
-            event: 'command',
-            func: 'setVolume',
-            args: [Math.round(currentVolRef.current)]
-         }), '*');
+         player.setVolume(Math.round(currentVolRef.current));
       }, 50);
 
       return () => clearInterval(fadeInterval);
-   }, [ducking, volume, videoId]);
+   }, [ducking, volume]);
 
-   if (!videoId) return null;
-
-   const src = `https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&controls=0&showinfo=0&rel=0&loop=1&playlist=${videoId}&enablejsapi=1`;
-
-   return (
-      <div className="absolute w-1 h-1 overflow-hidden opacity-0 pointer-events-none">
-         <iframe 
-            ref={playerRef}
-            width="560" 
-            height="315" 
-            src={src} 
-            title="YouTube video player" 
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-         ></iframe>
-      </div>
-   );
+   return <div id="yt-player-frame" className="absolute opacity-0 pointer-events-none"></div>;
 };
 
 const NowPlaying = ({ music }: { music: any }) => {
-   if (!music.videoId || !music.isPlaying) return null;
+   if ((!music.videoId && !music.playlistId) || !music.isPlaying) return null;
 
    return (
       <div className="absolute bottom-6 left-6 z-30 flex items-center gap-3 bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 p-3 rounded-xl pr-6 max-w-[30vw] animate-in slide-in-from-bottom-10 fade-in duration-700">
@@ -182,7 +241,7 @@ const NowPlaying = ({ music }: { music: any }) => {
 };
 
 export const TVDisplay: React.FC = () => {
-  const { isConnected, queueState, lastUpdateTimestamp } = useQueueSocket();
+  const { isConnected, queueState, lastUpdateTimestamp, playerCommand } = useQueueSocket();
   const [highlight, setHighlight] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -216,12 +275,12 @@ export const TVDisplay: React.FC = () => {
       const now = ctx.currentTime;
       const masterGain = ctx.createGain();
       masterGain.connect(ctx.destination);
-      masterGain.gain.value = 0.8; // Louder for attention
+      masterGain.gain.value = 0.8;
 
-      // Ding (Harmonics for richness)
+      // Ding
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
-      osc1.type = 'triangle'; // Triangle wave cuts through better on TV speakers
+      osc1.type = 'triangle';
       osc1.frequency.setValueAtTime(660, now);
       gain1.gain.setValueAtTime(0, now);
       gain1.gain.linearRampToValueAtTime(1, now + 0.02);
@@ -234,7 +293,7 @@ export const TVDisplay: React.FC = () => {
       // Dong
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
-      osc2.type = 'sine'; // Sine for warmth
+      osc2.type = 'sine';
       osc2.frequency.setValueAtTime(550, now + 0.6);
       gain2.gain.setValueAtTime(0, now + 0.6);
       gain2.gain.linearRampToValueAtTime(1, now + 0.65);
@@ -275,7 +334,7 @@ export const TVDisplay: React.FC = () => {
       
       lastPlayedTicketRef.current = queueState.currentTicket;
 
-      const timer = setTimeout(() => setHighlight(false), 8000);
+      const timer = setTimeout(() => setHighlight(false), 8000); // 8 seconds highlight
       return () => clearTimeout(timer);
     }
   }, [lastUpdateTimestamp, hasStarted, queueState.currentTicket, (queueState as any).recall]);
@@ -303,97 +362,98 @@ export const TVDisplay: React.FC = () => {
       
       <MusicPlayer 
          videoId={queueState.music?.videoId} 
+         playlistId={queueState.music?.playlistId}
          isPlaying={queueState.music?.isPlaying} 
          volume={queueState.music?.volume || 50}
          ducking={highlight} 
+         command={playerCommand}
       />
 
       <NowPlaying music={queueState.music} />
-
-      {/* Screen Flash Effect */}
-      <div className={`
-         absolute inset-0 bg-white z-50 pointer-events-none transition-opacity duration-700 ease-out
-         ${highlight ? 'opacity-30' : 'opacity-0'}
-      `}></div>
 
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black z-0"></div>
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 z-0 pointer-events-none"></div>
 
-      {/* GRID LAYOUT - OPTIMIZED FOR 720p TV */}
-      <div className="absolute inset-0 z-10 p-[4vh] flex gap-[4vh]">
+      {/* RIGID GRID LAYOUT - NO OVERLAPPING */}
+      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-0">
          
-         {/* LEFT COLUMN: MAIN DISPLAY (65% width) */}
-         <div className="w-[65%] flex flex-col justify-center relative">
-             {/* Center Glow */}
+         {/* LEFT COLUMN: MAIN DISPLAY (Col Span 8 = 66%) */}
+         <div className="col-span-8 flex flex-col items-center justify-center relative p-8">
+             {/* Glow Effect behind number */}
              <div className={`
-                 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[70vh] h-[70vh]
-                 bg-brand-600/30 rounded-full blur-[100px] transition-all duration-300 ease-out
-                 ${highlight ? 'opacity-100 scale-110' : 'opacity-20 scale-75'}
+                 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[60vh] h-[60vh]
+                 rounded-full blur-[100px] transition-all duration-300 ease-out
+                 ${highlight ? 'bg-yellow-500/30 opacity-100 scale-125' : 'bg-brand-600/10 opacity-20 scale-75'}
              `}></div>
 
-             <div className="relative z-10 flex flex-col items-center">
+             <div className="relative z-10 flex flex-col items-center w-full">
                  <h2 className="text-brand-200/60 font-bold text-[3vh] uppercase tracking-[0.5em] mb-[2vh]">Senha Atual</h2>
                  
-                 {/* MASSIVE NUMBER - USING VH FOR PERFECT SCALING */}
+                 {/* BIG NUMBER - Turns Yellow on Highlight */}
                  <div className={`
-                     text-[35vh] leading-none font-bold tracking-tighter text-white transition-all duration-300 ease-out
-                     ${highlight ? 'scale-125 drop-shadow-[0_0_60px_rgba(255,255,255,0.8)] animate-shake' : 'scale-100'}
+                     text-[40vh] leading-none font-bold tracking-tighter transition-all duration-300 ease-out
+                     ${highlight 
+                        ? 'text-yellow-400 scale-110 drop-shadow-[0_0_80px_rgba(250,204,21,0.6)] animate-shake' 
+                        : 'text-white scale-100'}
                  `}>
                     {String(queueState.currentTicket).padStart(3, '0')}
                  </div>
 
+                 {/* DESK CARD - Turns Yellowish on Highlight */}
                  <div className={`
-                     mt-[6vh] bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-3xl px-[6vw] py-[3vh]
+                     mt-[4vh] backdrop-blur-xl border rounded-3xl w-[80%] py-[3vh]
                      flex flex-col items-center gap-1 shadow-2xl transition-all duration-500
-                     ${highlight ? 'border-brand-500/50 bg-brand-900/40 translate-y-2' : ''}
+                     ${highlight 
+                        ? 'border-yellow-500/50 bg-yellow-900/40 translate-y-2 shadow-yellow-500/20' 
+                        : 'border-slate-700/50 bg-slate-900/60 shadow-black/50'}
                  `}>
                      <span className="text-slate-400 font-bold uppercase tracking-widest text-[1.5vh]">Dirija-se ao</span>
-                     <span className={`text-[8vh] font-bold leading-none ${highlight ? 'text-brand-300' : 'text-white'}`}>
+                     <span className={`text-[9vh] font-bold leading-none ${highlight ? 'text-yellow-100' : 'text-white'}`}>
                         {queueState.lastCalledDesk ? `Balcão ${String(queueState.lastCalledDesk).padStart(2, '0')}` : '---'}
                      </span>
                  </div>
              </div>
          </div>
 
-         {/* RIGHT COLUMN: SIDEBAR (35% width) */}
-         <div className="w-[35%] flex flex-col gap-[3vh]">
-             {/* Top Widgets Container - Fixed height ratio */}
-             <div className="h-[25%] flex gap-[2vh]">
-                <div className="flex-1">
+         {/* RIGHT COLUMN: SIDEBAR (Col Span 4 = 33%) */}
+         <div className="col-span-4 p-[3vh] h-full flex flex-col gap-[2vh] bg-slate-900/20 border-l border-white/5">
+             
+             {/* TOP WIDGETS (Fixed Height Section: 20%) */}
+             <div className="h-[20%] flex gap-[2vh]">
+                <div className="flex-1 min-w-0">
                    <DigitalClock />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                    <WeatherWidget />
                 </div>
              </div>
 
-             {/* History List */}
-             <div className="h-[75%] bg-slate-900/40 backdrop-blur-md rounded-3xl border border-slate-800/50 p-[3vh] flex flex-col shadow-xl overflow-hidden relative">
-                 <div className="flex items-center gap-3 mb-[3vh] text-slate-500 font-bold uppercase tracking-widest text-[1.5vh]">
+             {/* HISTORY LIST (Remaining Height: 80%) */}
+             <div className="h-[80%] bg-slate-900/40 backdrop-blur-md rounded-2xl border border-slate-800/50 p-[3vh] flex flex-col shadow-xl overflow-hidden relative">
+                 <div className="flex items-center gap-3 mb-[2vh] text-slate-500 font-bold uppercase tracking-widest text-[1.5vh] shrink-0">
                     <Clock className="w-4 h-4" />
                     Últimas Chamadas
                  </div>
 
-                 <div className="flex flex-col gap-[2vh] relative">
-                    {/* Render History */}
+                 {/* Scrollable container if needed, but fixed items usually fit */}
+                 <div className="flex-1 flex flex-col gap-[1.5vh]">
                     {queueState.history.slice(0, 5).map((t, i) => {
-                       // Opacity Logic
-                       const opacity = i === 0 ? 1 : i === 1 ? 0.7 : i === 2 ? 0.4 : i === 3 ? 0.2 : 0.1;
+                       const opacity = i === 0 ? 1 : i === 1 ? 0.7 : i === 2 ? 0.45 : i === 3 ? 0.25 : 0.15;
                        
                        return (
                           <div key={i} style={{ opacity }} className={`
-                             flex items-center justify-between p-[2vh] rounded-2xl border transition-all duration-500
+                             flex items-center justify-between p-[1.8vh] rounded-xl border transition-all duration-500
                              ${i === 0 && highlight 
-                                ? 'bg-white/10 border-brand-400/50 scale-105 shadow-lg translate-x-1' 
+                                ? 'bg-yellow-500/10 border-yellow-500/50 scale-105 shadow-lg translate-x-1' 
                                 : 'bg-slate-800/30 border-slate-700/30'}
                           `}>
-                             <span className={`text-[5vh] font-bold tracking-tight leading-none ${i === 0 ? 'text-white' : 'text-slate-400'}`}>
+                             <span className={`text-[5vh] font-bold tracking-tight leading-none ${i === 0 && highlight ? 'text-yellow-400' : (i===0 ? 'text-white' : 'text-slate-400')}`}>
                                 {String(t.number).padStart(3, '0')}
                              </span>
                              <div className="text-right leading-tight">
-                                <span className="block text-[1.2vh] uppercase font-bold text-slate-500">Balcão</span>
-                                <span className={`text-[2.5vh] font-bold ${i === 0 ? 'text-brand-300' : 'text-slate-500'}`}>
+                                <span className="block text-[1.1vh] uppercase font-bold text-slate-500">Balcão</span>
+                                <span className={`text-[2.5vh] font-bold ${i === 0 && highlight ? 'text-yellow-200' : (i===0 ? 'text-brand-300' : 'text-slate-500')}`}>
                                    {String(t.desk).padStart(2, '0')}
                                 </span>
                              </div>
