@@ -21,8 +21,9 @@ if (fs.existsSync(distPath)) {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
-  pingTimeout: 60000, // Increased to 60s to tolerate laggy TV connections
-  pingInterval: 25000
+  pingTimeout: 60000, 
+  pingInterval: 25000,
+  transports: ['polling', 'websocket'] // Allow polling for better compatibility
 });
 
 const DATA_FILE = path.join(__dirname, 'data.json');
@@ -229,10 +230,15 @@ const calculateAnalytics = (userId) => {
 loadData();
 resetDailyStatsIfNeeded();
 
+// Prevent crashes on socket errors
+io.engine.on("connection_error", (err) => {
+  // console.log(err.code, err.message); // Silent logger
+});
+
 io.on('connection', (socket) => {
   socket.emit('init', getPublicState());
 
-  // Error handler to prevent crashes on ECONNABORTED
+  // Robust error handling to prevent ECONNABORTED from crashing the process
   socket.on('error', (err) => {
     console.error(`Socket error [${socket.id}]:`, err.message);
   });

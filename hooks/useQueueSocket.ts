@@ -18,18 +18,17 @@ export const useQueueSocket = () => {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    // Check if we are in development mode to enable debug logs
     const isDev = (import.meta as any).env?.DEV;
     if (isDev) console.log('Initializing socket connection...');
 
-    socketRef.current = io(undefined, {
-        transports: ['websocket', 'polling'],
+    // Use polling first for maximum compatibility (fixes timeout on some TVs/Networks)
+    socketRef.current = io({
+        transports: ['polling', 'websocket'], 
         reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        timeout: 45000, // Increased timeout
-        autoConnect: true,
-        forceNew: true
+        timeout: 20000,
+        autoConnect: true
     });
 
     const socket = socketRef.current;
@@ -41,7 +40,8 @@ export const useQueueSocket = () => {
     });
 
     socket.on('connect_error', (err) => {
-        console.error('Socket Connection Error:', err.message);
+        // Only log in dev to avoid console spam on TV
+        if(isDev) console.error('Socket Connection Error:', err.message);
         setIsConnected(false);
     });
 
