@@ -103,6 +103,10 @@ const MusicPlayer = ({
     command: { action: string, timestamp: number } | null
 }) => {
    const playerRef = useRef<any>(null);
+   const volumeRef = useRef(volume);
+
+   // Sync volume ref for callbacks
+   useEffect(() => { volumeRef.current = volume; }, [volume]);
 
    useEffect(() => {
        if (!window.YT) {
@@ -117,10 +121,20 @@ const MusicPlayer = ({
        if (!window.YT || (!videoId && !playlistId)) return;
 
        const createPlayer = () => {
+           // Helper to load content
+           const loadContent = (player: any) => {
+               if (playlistId) {
+                   player.loadPlaylist({
+                       listType: 'playlist',
+                       list: playlistId,
+                   });
+               } else if (videoId) {
+                   player.loadVideoById(videoId);
+               }
+           };
+
            if (playerRef.current) {
-                // If player exists, just load new content
-                if (playlistId) playerRef.current.loadPlaylist({ list: playlistId, listType: 'playlist' });
-                else if (videoId) playerRef.current.loadVideoById(videoId);
+                loadContent(playerRef.current);
                 return;
            }
 
@@ -133,8 +147,7 @@ const MusicPlayer = ({
                    'disablekb': 1,
                    'fs': 0,
                    'rel': 0,
-                   'listType': playlistId ? 'playlist' : undefined,
-                   'list': playlistId,
+                   'mute': 1, // START MUTED TO ALLOW AUTOPLAY ON TV
                    'loop': 1,
                    'playsinline': 1,
                    'origin': window.location.origin,
@@ -142,22 +155,34 @@ const MusicPlayer = ({
                },
                events: {
                    'onReady': (event: any) => {
-                       // CRITICAL: Unmute is required for autoplay on many TVs/Browsers
-                       event.target.unMute();
-                       event.target.setVolume(volume);
+                       // Ensure it starts muted and playing
+                       event.target.mute();
                        if (isPlaying) {
-                           event.target.playVideo();
+                           if (playlistId) {
+                               event.target.loadPlaylist({ listType: 'playlist', list: playlistId });
+                           } else {
+                               event.target.playVideo();
+                           }
                        }
                    },
                    'onStateChange': (event: any) => {
-                        // 0 = Ended
+                        // YT.PlayerState.PLAYING = 1
+                        if (event.data === 1) {
+                            // Video started playing (muted). Now we unmute.
+                            // Small delay to ensure browser acknowledges playback
+                            setTimeout(() => {
+                                event.target.unMute();
+                                event.target.setVolume(volumeRef.current);
+                            }, 1000);
+                        }
+                        // YT.PlayerState.ENDED = 0
                         if (event.data === 0 && playlistId) {
                             event.target.nextVideo();
                         }
                    },
                    'onError': (event: any) => {
                        console.log("YT Error", event.data);
-                       // If error (like unplayable video), skip to next
+                       // 150/101 = restricted. Skip.
                        if (playlistId) event.target.nextVideo();
                    }
                }
@@ -364,7 +389,7 @@ export const TVDisplay: React.FC = () => {
          command={playerCommand}
       />
 
-      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-8 p-8">
+      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-8 p-10">
          
          {/* LEFT: MAIN DISPLAY (8 cols) */}
          <div className="col-span-8 flex flex-col items-center justify-center relative bg-slate-900/20 rounded-[3rem] border border-slate-800/50">
@@ -394,25 +419,32 @@ export const TVDisplay: React.FC = () => {
              </div>
          </div>
 
-         {/* RIGHT: SIDEBAR (4 cols) - SEPARATED BLOCKS */}
-         <div className="col-span-4 flex flex-col h-full gap-6">
+         {/* RIGHT: SIDEBAR (4 cols) - HUGE GAP */}
+         <div className="col-span-4 flex flex-col h-full gap-10">
              
              {/* BLOCK 1: CLOCK & WEATHER */}
-             <div className="h-[18%] bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex overflow-hidden">
+             <div className="h-[20%] bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex overflow-hidden">
                 <div className="flex-1"><DigitalClock /></div>
                 <div className="flex-1"><WeatherWidget /></div>
              </div>
 
-             {/* BLOCK 2: HISTORY */}
-             <div className="flex-1 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex flex-col overflow-hidden p-5">
-                 <div className="flex items-center gap-2 mb-5 text-slate-500 font-bold uppercase tracking-widest text-xs border-b border-slate-700 pb-3">
+             {/* BLOCK 2: HISTORY - STRONGER FADE */}
+             <div className="flex-1 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex flex-col overflow-hidden p-6">
+                 <div className="flex items-center gap-2 mb-6 text-slate-500 font-bold uppercase tracking-widest text-xs border-b border-slate-700 pb-4">
                     <Clock className="w-3 h-3 text-[#2563eb]" />
                     Últimas Chamadas
                  </div>
 
-                 <div className="flex-1 flex flex-col gap-3">
+                 <div className="flex-1 flex flex-col gap-4">
                     {queueState.history.slice(0, 5).map((t, i) => {
-                       const opacity = 1 - (i * 0.12); 
+                       // AGGRESSIVE FADE LOGIC
+                       // 0 -> 1.0 (Active)
+                       // 1 -> 0.60
+                       // 2 -> 0.40
+                       // 3 -> 0.20
+                       // 4 -> 0.10
+                       const opacity = i === 0 ? 1 : Math.max(0.1, 0.8 - (i * 0.2)); 
+                       
                        return (
                           <div key={i} style={{ opacity }} className={`
                              flex items-center justify-between p-4 rounded-xl border transition-all duration-500 relative overflow-hidden
@@ -421,7 +453,7 @@ export const TVDisplay: React.FC = () => {
                                 : 'bg-slate-900/50 border-slate-700/50'}
                           `}>
                              {i === 0 && highlight && <div className="absolute left-0 top-0 w-1 h-full bg-[#2563eb]"></div>}
-                             <span className={`text-3xl font-bold tracking-tight ${i === 0 && highlight ? 'text-[#2563eb]' : 'text-slate-300'}`}>
+                             <span className={`text-4xl font-bold tracking-tight ${i === 0 && highlight ? 'text-[#2563eb]' : 'text-slate-300'}`}>
                                 {String(t.number).padStart(3, '0')}
                              </span>
                              <div className="text-right">
@@ -436,7 +468,7 @@ export const TVDisplay: React.FC = () => {
              </div>
 
              {/* BLOCK 3: MUSIC */}
-             <div className="h-[14%] min-h-[100px]">
+             <div className="h-[15%] min-h-[100px]">
                  <NowPlayingWidget music={queueState.music} />
              </div>
 
