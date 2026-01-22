@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { QueueState, User, AuthResponse, LoginPayload, AnalyticsData } from '../types';
+import { QueueState, User, AuthResponse, LoginPayload, AnalyticsData, MusicState } from '../types';
 
 // DYNAMIC SERVER URL
-// This ensures that if you access via IP (192.168.x.x), the socket connects to that IP, not localhost.
 const getSocketUrl = () => {
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
@@ -16,7 +15,8 @@ export const useQueueSocket = () => {
     currentTicket: 0,
     lastCalledDesk: null,
     history: [],
-    stats: { totalCallsToday: 0, averageServiceTime: 0 }
+    stats: { totalCallsToday: 0, averageServiceTime: 0 },
+    music: { videoId: null, title: '', thumbnail: '', isPlaying: false, volume: 50 }
   });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number>(0);
@@ -29,7 +29,7 @@ export const useQueueSocket = () => {
     
     socketRef.current = io(serverUrl, {
         transports: ['websocket', 'polling'],
-        reconnectionAttempts: 10, // Increased for unstable TV wifi
+        reconnectionAttempts: 10, 
         timeout: 20000
     });
 
@@ -38,8 +38,6 @@ export const useQueueSocket = () => {
     socket.on('connect', () => {
         setIsConnected(true);
         console.log('Socket connected');
-        // We do NOT auto-login from localstorage anymore because desk selection is mandatory per session
-        // Clean up old session data
         localStorage.removeItem('autoparts_user');
     });
 
@@ -85,7 +83,6 @@ export const useQueueSocket = () => {
   const logout = () => {
       setCurrentUser(null);
       if (socketRef.current) socketRef.current.disconnect();
-      // Reconnect to keep socket alive for login screen
       const serverUrl = getSocketUrl();
       socketRef.current = io(serverUrl);
   };
@@ -120,6 +117,10 @@ export const useQueueSocket = () => {
     }
   }, [currentUser]);
 
+  const setMusic = useCallback((music: Partial<MusicState>) => {
+    if (socketRef.current?.connected) socketRef.current.emit('setMusic', music);
+  }, []);
+
   return {
     isConnected,
     queueState,
@@ -133,7 +134,8 @@ export const useQueueSocket = () => {
       recallCurrent,
       revertPrevious,
       setTicketNumber,
-      getAnalytics
+      getAnalytics,
+      setMusic
     }
   };
 };

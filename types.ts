@@ -19,6 +19,14 @@ export interface Ticket {
   isRetroactive?: boolean; // If true, visual distinction on TV
 }
 
+export interface MusicState {
+  videoId: string | null;
+  title: string;
+  thumbnail: string;
+  isPlaying: boolean;
+  volume: number; // 0-100
+}
+
 export interface QueueState {
   currentTicket: number;
   lastCalledDesk: string | null;
@@ -27,6 +35,7 @@ export interface QueueState {
     totalCallsToday: number;
     averageServiceTime: number; // in seconds
   };
+  music: MusicState;
 }
 
 export interface AuthResponse {
@@ -64,6 +73,7 @@ export interface ClientEvents {
   'revert': () => void;
   'setTicketNumber': (number: number) => void; // New: Manual sync
   'getAnalytics': (userId: string, callback: (data: AnalyticsData) => void) => void;
+  'setMusic': (music: Partial<MusicState>) => void;
 }
 
 export interface SocketEvents {
