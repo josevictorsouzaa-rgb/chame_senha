@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQueueSocket } from '../hooks/useQueueSocket';
 import { 
   LogOut, TrendingUp, Clock, Users,
   RotateCcw, ChevronRight, Megaphone,
   Monitor, AlertCircle, Settings, 
-  Menu, X, CheckCircle, AlertTriangle
+  Menu, X, CheckCircle, AlertTriangle,
+  BarChart3, Trophy, Calendar, LayoutDashboard
 } from 'lucide-react';
+import { AnalyticsData } from '../types';
 
 // --- SHARED COMPONENTS ---
 
@@ -75,9 +77,126 @@ const ConfigModal = ({ isOpen, onClose, onConfirm, current }: any) => {
   );
 };
 
+// --- ANALYTICS VIEW COMPONENT ---
+const AnalyticsView = ({ fetchAnalytics, name }: { fetchAnalytics: any, name: string }) => {
+  const [data, setData] = useState<AnalyticsData | null>(null);
+
+  useEffect(() => {
+    fetchAnalytics(setData);
+  }, [fetchAnalytics]);
+
+  if (!data) return <div className="p-8 text-center text-slate-500">Carregando indicadores...</div>;
+
+  const maxVal = Math.max(...data.user.monthlyHistory.map(m => m.count), 1);
+
+  return (
+    <div className="p-8 space-y-8 overflow-y-auto h-full bg-slate-50">
+      <div className="flex items-center justify-between">
+         <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-brand-600" />
+            Indicadores de Performance
+         </h2>
+         <span className="text-sm font-bold text-slate-400 uppercase tracking-wide">Ano Atual</span>
+      </div>
+
+      {/* STORE STATS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start gap-4">
+             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+                <Users className="w-6 h-6" />
+             </div>
+             <div>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Loja (Histórico)</p>
+                <p className="text-2xl font-mono font-bold text-slate-900 mt-1">{data.store.totalCalls}</p>
+                <p className="text-xs text-slate-400 mt-1">Chamadas registradas no sistema</p>
+             </div>
+         </div>
+         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start gap-4">
+             <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
+                <TrendingUp className="w-6 h-6" />
+             </div>
+             <div>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Dia Recorde da Loja</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                   <p className="text-2xl font-mono font-bold text-slate-900">{data.store.busiestDay.count}</p>
+                   <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded">
+                      {data.store.busiestDay.date}
+                   </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">Maior volume diário</p>
+             </div>
+         </div>
+         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start gap-4">
+             <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+                <Calendar className="w-6 h-6" />
+             </div>
+             <div>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Volume Hoje (Loja)</p>
+                <p className="text-2xl font-mono font-bold text-slate-900 mt-1">{data.store.callsToday}</p>
+             </div>
+         </div>
+      </div>
+
+      <div className="h-px bg-slate-200"></div>
+
+      {/* INDIVIDUAL STATS */}
+      <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2">
+         <Trophy className="w-5 h-5 text-amber-500" />
+         Performance Individual: <span className="text-brand-600">{name}</span>
+      </h3>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+         <div className="bg-slate-800 text-white p-6 rounded-xl shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-10">
+               <Trophy className="w-24 h-24" />
+            </div>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider relative z-10">Seu Recorde Pessoal</p>
+            <p className="text-4xl font-mono font-bold mt-2 relative z-10">{data.user.bestDay.count}</p>
+            <p className="text-sm text-slate-300 mt-1 relative z-10 font-medium">em {data.user.bestDay.date}</p>
+         </div>
+
+         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+             <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Mês Atual</p>
+             <p className="text-3xl font-mono font-bold text-slate-900 mt-2">{data.user.totalMonth}</p>
+         </div>
+
+         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+             <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Anual</p>
+             <p className="text-3xl font-mono font-bold text-slate-900 mt-2">{data.user.totalAnnual}</p>
+         </div>
+      </div>
+
+      {/* CHART SECTION */}
+      <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+         <h4 className="text-sm font-bold text-slate-600 uppercase tracking-wide mb-6">Volume Mensal (Este Ano)</h4>
+         
+         <div className="flex items-end justify-between h-48 gap-2">
+            {data.user.monthlyHistory.map((stat, i) => (
+               <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
+                  <div className="w-full bg-slate-100 rounded-t-lg relative h-full flex items-end overflow-hidden">
+                     <div 
+                        className="w-full bg-brand-500 group-hover:bg-brand-400 transition-all duration-500 rounded-t-sm"
+                        style={{ height: `${(stat.count / maxVal) * 100}%` }}
+                     ></div>
+                  </div>
+                  <span className="text-xs font-bold text-slate-400 uppercase">{stat.month}</span>
+                  <span className="text-[10px] font-bold text-slate-800 opacity-0 group-hover:opacity-100 transition-opacity absolute -mt-8 bg-white px-1 rounded shadow-sm border border-slate-100">
+                     {stat.count}
+                  </span>
+               </div>
+            ))}
+         </div>
+      </div>
+    </div>
+  );
+};
+
 export const SellerDashboard: React.FC = () => {
   const { isConnected, queueState, currentUser, actions } = useQueueSocket();
   
+  // App View State
+  const [currentView, setCurrentView] = useState<'dashboard' | 'analytics'>('dashboard');
+
   // Login States
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -187,10 +306,26 @@ export const SellerDashboard: React.FC = () => {
             </div>
 
             <nav className="space-y-2">
-               <div className="px-3 py-2 bg-slate-800/50 rounded text-sm font-medium text-white flex items-center gap-3 border-l-2 border-brand-500">
-                  <Monitor className="w-4 h-4" /> Painel Principal
-               </div>
+               <button 
+                  onClick={() => setCurrentView('dashboard')}
+                  className={`w-full px-3 py-2 rounded text-sm font-medium flex items-center gap-3 transition-colors text-left
+                     ${currentView === 'dashboard' ? 'bg-slate-800/50 text-white border-l-2 border-brand-500' : 'text-slate-400 hover:text-white hover:bg-slate-800'}
+                  `}
+               >
+                  <LayoutDashboard className="w-4 h-4" /> Painel Principal
+               </button>
+
+               <button 
+                  onClick={() => setCurrentView('analytics')}
+                  className={`w-full px-3 py-2 rounded text-sm font-medium flex items-center gap-3 transition-colors text-left
+                     ${currentView === 'analytics' ? 'bg-slate-800/50 text-white border-l-2 border-brand-500' : 'text-slate-400 hover:text-white hover:bg-slate-800'}
+                  `}
+               >
+                  <BarChart3 className="w-4 h-4" /> Indicadores
+               </button>
                
+               <div className="h-px bg-slate-800 my-2"></div>
+
                <button 
                   onClick={() => setModalType('config')}
                   className="w-full px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded text-sm font-medium flex items-center gap-3 transition-colors text-left"
@@ -213,7 +348,7 @@ export const SellerDashboard: React.FC = () => {
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col min-w-0">
          
-         {/* Top Bar Stats */}
+         {/* Top Bar Stats (Always visible in dashboard, optional in analytics but kept for consistency) */}
          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
             <div className="flex gap-8">
                 <div className="flex items-center gap-3">
@@ -238,128 +373,131 @@ export const SellerDashboard: React.FC = () => {
          </header>
 
          {/* Workspace */}
-         <div className="flex-1 p-8 flex gap-8 overflow-hidden bg-slate-50">
-            
-            {/* ACTION CENTER */}
-            <div className="flex-[3] flex flex-col gap-6">
-               
-               {/* Big Card */}
-               <div className="bg-white rounded-xl shadow-card border border-slate-200 flex-1 flex flex-col relative overflow-hidden">
-                  <div className="bg-slate-50/50 px-8 py-4 border-b border-slate-100 flex justify-between items-center">
-                     <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
-                        <Monitor className="w-4 h-4 text-brand-600" />
-                        Status da Fila
-                     </h2>
-                     <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold border border-green-200 flex items-center gap-2">
-                        Sistema Operante
-                     </div>
-                  </div>
-
-                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                     <div className="mb-10 relative">
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em] mb-4">Senha em Atendimento</p>
-                        <div className="text-[9rem] leading-none font-mono font-bold text-slate-900 tracking-tighter drop-shadow-sm">
-                           {String(queueState.currentTicket).padStart(3, '0')}
+         {currentView === 'dashboard' ? (
+            <div className="flex-1 p-8 flex gap-8 overflow-hidden bg-slate-50">
+               {/* ACTION CENTER */}
+               <div className="flex-[3] flex flex-col gap-6">
+                  
+                  {/* Big Card */}
+                  <div className="bg-white rounded-xl shadow-card border border-slate-200 flex-1 flex flex-col relative overflow-hidden">
+                     <div className="bg-slate-50/50 px-8 py-4 border-b border-slate-100 flex justify-between items-center">
+                        <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
+                           <Monitor className="w-4 h-4 text-brand-600" />
+                           Status da Fila
+                        </h2>
+                        <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold border border-green-200 flex items-center gap-2">
+                           Sistema Operante
                         </div>
-                        {queueState.lastCalledDesk && (
-                           <div className="absolute -right-24 top-1/2 -translate-y-1/2 flex flex-col gap-1 items-start opacity-50">
-                               <span className="text-[10px] uppercase font-bold">No Balcão</span>
-                               <span className="text-2xl font-bold font-mono">{queueState.lastCalledDesk}</span>
-                           </div>
-                        )}
                      </div>
 
-                     <div className="w-full max-w-3xl grid grid-cols-5 gap-4">
-                        {/* RECALL */}
-                        <button 
-                           onClick={() => setModalType('confirmRecall')}
-                           className="col-span-2 flex flex-col items-center justify-center p-6 bg-white border-2 border-amber-200 hover:border-amber-400 text-amber-700 rounded-xl hover:shadow-lg transition-all active:scale-[0.99] group"
-                        >
-                           <Megaphone className="w-8 h-8 mb-3 group-hover:scale-110 transition-transform" />
-                           <span className="font-bold text-lg uppercase tracking-tight">Rechamar</span>
-                           <span className="text-xs font-medium opacity-70">Tocar som novamente</span>
-                        </button>
-
-                        {/* CALL NEXT */}
-                        <button 
-                           onClick={() => setModalType('confirmCall')}
-                           className="col-span-3 flex flex-col items-center justify-center p-6 bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-action shadow-brand-500/30 transition-all active:scale-[0.99] group relative border border-brand-500"
-                        >  
-                           <div className="absolute top-4 right-4 bg-brand-800/50 px-2 py-1 rounded text-[10px] font-mono font-bold text-brand-200 border border-brand-500/50">
-                              PRÓX: {String(queueState.currentTicket + 1).padStart(3, '0')}
+                     <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                        <div className="mb-10 relative">
+                           <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em] mb-4">Senha em Atendimento</p>
+                           <div className="text-[9rem] leading-none font-mono font-bold text-slate-900 tracking-tighter drop-shadow-sm">
+                              {String(queueState.currentTicket).padStart(3, '0')}
                            </div>
-                           <ChevronRight className="w-12 h-12 mb-2 group-hover:translate-x-2 transition-transform" />
-                           <span className="font-bold text-2xl uppercase tracking-wide">Chamar Próximo</span>
-                        </button>
+                           {queueState.lastCalledDesk && (
+                              <div className="absolute -right-24 top-1/2 -translate-y-1/2 flex flex-col gap-1 items-start opacity-50">
+                                  <span className="text-[10px] uppercase font-bold">No Balcão</span>
+                                  <span className="text-2xl font-bold font-mono">{queueState.lastCalledDesk}</span>
+                              </div>
+                           )}
+                        </div>
+
+                        <div className="w-full max-w-3xl grid grid-cols-5 gap-4">
+                           {/* RECALL */}
+                           <button 
+                              onClick={() => setModalType('confirmRecall')}
+                              className="col-span-2 flex flex-col items-center justify-center p-6 bg-white border-2 border-amber-200 hover:border-amber-400 text-amber-700 rounded-xl hover:shadow-lg transition-all active:scale-[0.99] group"
+                           >
+                              <Megaphone className="w-8 h-8 mb-3 group-hover:scale-110 transition-transform" />
+                              <span className="font-bold text-lg uppercase tracking-tight">Rechamar</span>
+                              <span className="text-xs font-medium opacity-70">Tocar som novamente</span>
+                           </button>
+
+                           {/* CALL NEXT */}
+                           <button 
+                              onClick={() => setModalType('confirmCall')}
+                              className="col-span-3 flex flex-col items-center justify-center p-6 bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-action shadow-brand-500/30 transition-all active:scale-[0.99] group relative border border-brand-500"
+                           >  
+                              <div className="absolute top-4 right-4 bg-brand-800/50 px-2 py-1 rounded text-[10px] font-mono font-bold text-brand-200 border border-brand-500/50">
+                                 PRÓX: {String(queueState.currentTicket + 1).padStart(3, '0')}
+                              </div>
+                              <ChevronRight className="w-12 h-12 mb-2 group-hover:translate-x-2 transition-transform" />
+                              <span className="font-bold text-2xl uppercase tracking-wide">Chamar Próximo</span>
+                           </button>
+                        </div>
+                     </div>
+
+                     <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+                         <button 
+                            onClick={() => setModalType('confirmRevert')}
+                            className="flex items-center gap-2 text-slate-400 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors"
+                         >
+                            <RotateCcw className="w-4 h-4" /> Desfazer Última Ação
+                         </button>
                      </div>
                   </div>
+               </div>
 
-                  <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
-                      <button 
-                         onClick={() => setModalType('confirmRevert')}
-                         className="flex items-center gap-2 text-slate-400 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors"
-                      >
-                         <RotateCcw className="w-4 h-4" /> Desfazer Última Ação
-                      </button>
+               {/* HISTORY SIDEBAR */}
+               <div className="flex-[1.5] bg-white rounded-xl shadow-card border border-slate-200 flex flex-col overflow-hidden">
+                  <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex justify-between items-center">
+                     <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Histórico</h3>
+                     <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded">Últimos 15</span>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
+                     <table className="w-full text-left">
+                        <thead className="bg-slate-50 sticky top-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                           <tr>
+                              <th className="px-5 py-2">Senha</th>
+                              <th className="px-5 py-2">Mesa</th>
+                              <th className="px-5 py-2 text-right"></th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                           {queueState.history.slice(0, 15).map((ticket, index) => {
+                              const isMine = ticket.desk === currentUser.desk;
+                              const isCurrent = index === 0;
+                              return (
+                                 <tr key={index} className={`hover:bg-slate-50 transition-colors ${isCurrent ? 'bg-brand-50/40' : ''}`}>
+                                    <td className="px-5 py-3">
+                                       <span className={`font-mono font-bold text-lg ${isCurrent ? 'text-brand-600' : 'text-slate-700'}`}>
+                                          {String(ticket.number).padStart(3, '0')}
+                                       </span>
+                                    </td>
+                                    <td className="px-5 py-3">
+                                       <div className="flex flex-col">
+                                          <span className="text-sm font-bold text-slate-600">{ticket.desk}</span>
+                                          {isMine && <span className="text-[10px] text-brand-600 font-bold uppercase">Você</span>}
+                                       </div>
+                                    </td>
+                                    <td className="px-5 py-3 text-right">
+                                       <button 
+                                          onClick={() => actions.callSpecific(ticket.number, true)}
+                                          className="text-slate-300 hover:text-brand-600 p-2 hover:bg-brand-50 rounded transition-all"
+                                          title="Rechamar"
+                                       >
+                                          <Megaphone className="w-4 h-4" />
+                                       </button>
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
+                     </table>
+                     {queueState.history.length === 0 && (
+                        <div className="p-8 text-center text-slate-400 text-xs uppercase font-medium">
+                           Sem chamadas hoje
+                        </div>
+                     )}
                   </div>
                </div>
             </div>
-
-            {/* HISTORY SIDEBAR */}
-            <div className="flex-[1.5] bg-white rounded-xl shadow-card border border-slate-200 flex flex-col overflow-hidden">
-               <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex justify-between items-center">
-                  <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Histórico</h3>
-                  <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded">Últimos 15</span>
-               </div>
-
-               <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
-                  <table className="w-full text-left">
-                     <thead className="bg-slate-50 sticky top-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        <tr>
-                           <th className="px-5 py-2">Senha</th>
-                           <th className="px-5 py-2">Mesa</th>
-                           <th className="px-5 py-2 text-right"></th>
-                        </tr>
-                     </thead>
-                     <tbody className="divide-y divide-slate-100">
-                        {queueState.history.slice(0, 15).map((ticket, index) => {
-                           const isMine = ticket.desk === currentUser.desk;
-                           const isCurrent = index === 0;
-                           return (
-                              <tr key={index} className={`hover:bg-slate-50 transition-colors ${isCurrent ? 'bg-brand-50/40' : ''}`}>
-                                 <td className="px-5 py-3">
-                                    <span className={`font-mono font-bold text-lg ${isCurrent ? 'text-brand-600' : 'text-slate-700'}`}>
-                                       {String(ticket.number).padStart(3, '0')}
-                                    </span>
-                                 </td>
-                                 <td className="px-5 py-3">
-                                    <div className="flex flex-col">
-                                       <span className="text-sm font-bold text-slate-600">{ticket.desk}</span>
-                                       {isMine && <span className="text-[10px] text-brand-600 font-bold uppercase">Você</span>}
-                                    </div>
-                                 </td>
-                                 <td className="px-5 py-3 text-right">
-                                    <button 
-                                       onClick={() => actions.callSpecific(ticket.number, true)}
-                                       className="text-slate-300 hover:text-brand-600 p-2 hover:bg-brand-50 rounded transition-all"
-                                       title="Rechamar"
-                                    >
-                                       <Megaphone className="w-4 h-4" />
-                                    </button>
-                                 </td>
-                              </tr>
-                           );
-                        })}
-                     </tbody>
-                  </table>
-                  {queueState.history.length === 0 && (
-                     <div className="p-8 text-center text-slate-400 text-xs uppercase font-medium">
-                        Sem chamadas hoje
-                     </div>
-                  )}
-               </div>
-            </div>
-         </div>
+         ) : (
+            <AnalyticsView fetchAnalytics={actions.getAnalytics} name={currentUser.name} />
+         )}
       </main>
 
       {/* --- MODALS --- */}

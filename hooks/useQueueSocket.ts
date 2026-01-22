@@ -1,8 +1,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { QueueState, User, AuthResponse, LoginPayload } from '../types';
+import { QueueState, User, AuthResponse, LoginPayload, AnalyticsData } from '../types';
 
-const SERVER_URL = 'http://localhost:3001';
+// DYNAMIC SERVER URL
+// This ensures that if you access via IP (192.168.x.x), the socket connects to that IP, not localhost.
+const getSocketUrl = () => {
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  return `${protocol}//${hostname}:3001`;
+};
 
 export const useQueueSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -18,18 +24,27 @@ export const useQueueSocket = () => {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    socketRef.current = io(SERVER_URL, {
+    const serverUrl = getSocketUrl();
+    console.log('Connecting to socket at:', serverUrl);
+    
+    socketRef.current = io(serverUrl, {
         transports: ['websocket', 'polling'],
-        reconnectionAttempts: 5,
+        reconnectionAttempts: 10, // Increased for unstable TV wifi
+        timeout: 20000
     });
 
     const socket = socketRef.current;
 
     socket.on('connect', () => {
         setIsConnected(true);
+        console.log('Socket connected');
         // We do NOT auto-login from localstorage anymore because desk selection is mandatory per session
         // Clean up old session data
         localStorage.removeItem('autoparts_user');
+    });
+
+    socket.on('connect_error', (err) => {
+        console.error('Socket Connection Error:', err);
     });
 
     socket.on('disconnect', () => setIsConnected(false));
@@ -55,7 +70,7 @@ export const useQueueSocket = () => {
   const login = (creds: LoginPayload): Promise<AuthResponse> => {
     return new Promise((resolve) => {
         if (!socketRef.current?.connected) {
-             resolve({ success: false, message: 'Sem conexão com servidor.' });
+             resolve({ success: false, message: 'Sem conexão com servidor. Verifique o Wi-Fi.' });
              return;
         }
         socketRef.current.emit('login', creds, (response: AuthResponse) => {
@@ -71,7 +86,8 @@ export const useQueueSocket = () => {
       setCurrentUser(null);
       if (socketRef.current) socketRef.current.disconnect();
       // Reconnect to keep socket alive for login screen
-      socketRef.current = io(SERVER_URL);
+      const serverUrl = getSocketUrl();
+      socketRef.current = io(serverUrl);
   };
 
   const callNext = useCallback(() => {
@@ -98,6 +114,12 @@ export const useQueueSocket = () => {
     if (socketRef.current?.connected) socketRef.current.emit('setTicketNumber', number);
   }, []);
 
+  const getAnalytics = useCallback((callback: (data: AnalyticsData) => void) => {
+    if (socketRef.current?.connected && currentUser) {
+      socketRef.current.emit('getAnalytics', currentUser.id, callback);
+    }
+  }, [currentUser]);
+
   return {
     isConnected,
     queueState,
@@ -110,7 +132,8 @@ export const useQueueSocket = () => {
       callSpecific,
       recallCurrent,
       revertPrevious,
-      setTicketNumber
+      setTicketNumber,
+      getAnalytics
     }
   };
 };

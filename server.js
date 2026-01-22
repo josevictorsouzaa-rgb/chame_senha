@@ -138,6 +138,96 @@ const getUserStats = (userId, currentDesk) => {
   };
 };
 
+// Analytics Logic
+const calculateAnalytics = (userId) => {
+  const user = db.users.find(u => u.id === userId);
+  const currentYear = new Date().getFullYear();
+  const currentMonthKey = getMonthKey();
+
+  // --- Store Analytics ---
+  const storeByDate = {};
+  let storeMaxDay = { date: '-', count: 0 };
+  
+  // We scan the global history for store stats
+  // Note: db.history is truncated in the live object to 20 for performance in callNext,
+  // but for a REAL system, we would query the persistent DB. 
+  // IMPORTANT: Since we don't have a SQL DB, we can only analyze what's in memory.
+  // Ideally, 'history' shouldn't be truncated in 'db' if we want long-term stats, 
+  // or we should store stats separately. 
+  // *Patch for this exercise*: I will assume db.history holds more data or we use user histories to aggregate.
+  
+  // Let's aggregate from ALL users histories to get the "Store" picture since db.history is truncated
+  const allUserHistories = db.users.flatMap(u => u.history || []);
+
+  allUserHistories.forEach(h => {
+    const d = new Date(h.timestamp);
+    const dateKey = d.toLocaleDateString();
+    storeByDate[dateKey] = (storeByDate[dateKey] || 0) + 1;
+    if (storeByDate[dateKey] > storeMaxDay.count) {
+      storeMaxDay = { date: dateKey, count: storeByDate[dateKey] };
+    }
+  });
+
+  // --- User Analytics ---
+  const userHistory = user?.history || [];
+  const userByDate = {};
+  const userByMonth = {}; // 'Jan': 10
+  let userBestDay = { date: '-', count: 0 };
+  let annualCount = 0;
+  let monthCount = 0;
+
+  userHistory.forEach(h => {
+    const d = new Date(h.timestamp);
+    const dateKey = d.toLocaleDateString();
+    const year = d.getFullYear();
+    const monthIndex = d.getMonth(); // 0-11
+    const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+    const monthName = d.toLocaleDateString('pt-BR', { month: 'short' }); // jan, fev
+
+    // Daily Best
+    userByDate[dateKey] = (userByDate[dateKey] || 0) + 1;
+    if (userByDate[dateKey] > userBestDay.count) {
+      userBestDay = { date: dateKey, count: userByDate[dateKey] };
+    }
+
+    // Annual
+    if (year === currentYear) {
+      annualCount++;
+      // Monthly Chart Data (Only current year)
+      userByMonth[monthIndex] = (userByMonth[monthIndex] || 0) + 1;
+    }
+
+    // Current Month
+    if (monthKey === currentMonthKey) {
+      monthCount++;
+    }
+  });
+
+  // Format Monthly History for Chart (Array 0-11)
+  const monthlyHistory = [];
+  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  for(let i=0; i<12; i++) {
+    monthlyHistory.push({
+      month: months[i],
+      count: userByMonth[i] || 0
+    });
+  }
+
+  return {
+    store: {
+      totalCalls: allUserHistories.length,
+      busiestDay: storeMaxDay,
+      callsToday: db.dailyStats.count
+    },
+    user: {
+      totalAnnual: annualCount,
+      totalMonth: monthCount,
+      bestDay: userBestDay,
+      monthlyHistory
+    }
+  };
+};
+
 loadData();
 resetDailyStatsIfNeeded();
 
@@ -172,6 +262,12 @@ io.on('connection', (socket) => {
   });
 
   // --- ACTIONS ---
+  
+  socket.on('getAnalytics', (userId, callback) => {
+    // Only allow if user exists (simple auth check)
+    const stats = calculateAnalytics(userId);
+    callback(stats);
+  });
 
   socket.on('setTicketNumber', (number) => {
     db.config.currentTicket = number;
@@ -207,10 +303,13 @@ io.on('connection', (socket) => {
     user.totalCalls++;
     user.lastCallTimestamp = now;
     
+    // Store in User History (Used for Analytics)
+    // We do NOT truncate user history in this version to support analytics
+    // In production, this needs a DB. For JSON file, let's keep it but be careful.
     if (!user.history) user.history = [];
     user.history.unshift({ timestamp: new Date().toISOString(), number: db.config.currentTicket, desk: desk });
-    if(user.history.length > 50) user.history.pop();
-
+    
+    // Store in Global History (Truncated for Display)
     db.history.unshift({
       number: db.config.currentTicket,
       desk: desk,

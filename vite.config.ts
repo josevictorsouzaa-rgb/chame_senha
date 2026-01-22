@@ -5,6 +5,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    host: true, // Listen on all addresses
+    host: '0.0.0.0', // Listen on all network addresses
+    strictPort: true,
+    allowedHosts: true, // Allow any host (for local network access)
+    cors: true
   }
 });
