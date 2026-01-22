@@ -34,15 +34,26 @@
     <!-- TV Compatibility Error Handler -->
     <script>
       window.onerror = function(message, source, lineno, colno, error) {
+        // Ignora erros genéricos de script cross-origin (comuns em TVs com CDNs)
+        if (typeof message === 'string' && message.indexOf('Script error') !== -1) {
+            return false;
+        }
+
         const debug = document.getElementById('tv-debug-layer');
         if (debug) {
           debug.style.display = 'block';
+          // Limpa mensagens antigas para não cobrir a tela inteira
+          if (debug.innerHTML.length > 500) debug.innerHTML = '';
           debug.innerHTML += `[ERROR] ${message} \nAt: ${source}:${lineno}\n\n`;
         }
       };
+
       window.onunhandledrejection = function(event) {
         const debug = document.getElementById('tv-debug-layer');
         if (debug) {
+          // Ignora erros de redimensionamento comuns em layouts responsivos
+          if (event.reason && String(event.reason).includes('ResizeObserver')) return;
+
           debug.style.display = 'block';
           debug.innerHTML += `[PROMISE] ${event.reason}\n\n`;
         }
