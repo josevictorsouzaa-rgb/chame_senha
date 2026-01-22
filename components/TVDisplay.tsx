@@ -38,8 +38,8 @@ const WeatherWidget: React.FC = () => {
   const currentCode = weather.current.weather_code;
 
   return (
-    <div className="flex flex-col justify-center items-center bg-slate-800/80 rounded-2xl border border-slate-700 h-full w-full relative overflow-hidden">
-       <div className="flex items-center gap-4 relative z-10">
+    <div className="flex flex-col justify-center items-center h-full w-full">
+       <div className="flex items-center gap-4">
           <div className="animate-pulse-slow">
             {getWeatherIcon(currentCode, "w-10 h-10")}
           </div>
@@ -63,8 +63,8 @@ const DigitalClock: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col justify-center items-center bg-slate-800/80 rounded-2xl border border-slate-700 h-full w-full relative overflow-hidden">
-      <div className="relative z-10 text-center">
+    <div className="flex flex-col justify-center items-center h-full w-full border-r border-slate-700/50">
+      <div className="text-center">
           <div className="text-[5vh] font-sans font-bold text-white tracking-tight leading-none tabular-nums">
             {time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
           </div>
@@ -137,19 +137,28 @@ const MusicPlayer = ({
                    'list': playlistId,
                    'loop': 1,
                    'playsinline': 1,
-                   'origin': window.location.origin 
+                   'origin': window.location.origin,
+                   'enablejsapi': 1
                },
                events: {
                    'onReady': (event: any) => {
+                       // CRITICAL: Unmute is required for autoplay on many TVs/Browsers
+                       event.target.unMute();
                        event.target.setVolume(volume);
                        if (isPlaying) {
                            event.target.playVideo();
                        }
                    },
                    'onStateChange': (event: any) => {
+                        // 0 = Ended
                         if (event.data === 0 && playlistId) {
                             event.target.nextVideo();
                         }
+                   },
+                   'onError': (event: any) => {
+                       console.log("YT Error", event.data);
+                       // If error (like unplayable video), skip to next
+                       if (playlistId) event.target.nextVideo();
                    }
                }
            });
@@ -190,25 +199,26 @@ const MusicPlayer = ({
 // Moved inside Sidebar to avoid overlap
 const NowPlayingWidget = ({ music }: { music: any }) => {
    if ((!music.videoId && !music.playlistId) || !music.isPlaying) return (
-       <div className="mt-auto bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4 flex items-center justify-center gap-2 text-slate-600">
-           <Music className="w-4 h-4" />
-           <span className="text-xs font-medium uppercase tracking-wider">Silêncio</span>
+       <div className="h-full bg-slate-800 rounded-2xl border border-slate-700 p-4 flex items-center justify-center gap-2 text-slate-500">
+           <Music className="w-5 h-5" />
+           <span className="text-xs font-bold uppercase tracking-wider">Aguardando Música...</span>
        </div>
    );
 
    return (
-      <div className="mt-auto bg-slate-800 rounded-2xl border border-blue-900/30 p-4 flex items-center gap-3 relative overflow-hidden">
-         <div className="absolute top-0 left-0 w-1 h-full bg-[#2563eb]"></div>
+      <div className="h-full bg-slate-800 rounded-2xl border border-blue-900/50 p-4 flex items-center gap-4 relative overflow-hidden shadow-lg">
+         {/* Animated Background Bar */}
+         <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-400 animate-pulse w-full"></div>
          
          <div className="relative shrink-0">
-            <img src={music.thumbnail} className="w-10 h-10 rounded-md object-cover bg-slate-900" />
+            <img src={music.thumbnail} className="w-12 h-12 rounded-lg object-cover bg-slate-900 shadow-md" />
          </div>
          <div className="flex-1 min-w-0 z-10">
              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Som Ambiente</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Tocando Agora</span>
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]"></span>
              </div>
-             <p className="text-white font-bold leading-tight line-clamp-1 text-xs">{music.title}</p>
+             <p className="text-white font-bold leading-tight line-clamp-1 text-sm">{music.title}</p>
          </div>
       </div>
    );
@@ -240,11 +250,9 @@ export const TVDisplay: React.FC = () => {
       
       const ctx = audioCtxRef.current;
       if (ctx) {
-        // Unlock browser audio policy
         if (ctx.state === 'suspended') {
             ctx.resume();
         }
-        // Play a silent sound to force wake up audio subsystem
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         gain.gain.value = 0;
@@ -262,7 +270,6 @@ export const TVDisplay: React.FC = () => {
     try {
       const ctx = audioCtxRef.current;
       if (!ctx || ctx.state !== 'running') {
-         // Attempt recovery
          if(ctx) ctx.resume();
          return; 
       }
@@ -270,9 +277,8 @@ export const TVDisplay: React.FC = () => {
       const now = ctx.currentTime;
       const masterGain = ctx.createGain();
       masterGain.connect(ctx.destination);
-      masterGain.gain.value = 1.0; // Max volume
+      masterGain.gain.value = 1.0; 
 
-      // "Ding" - High Tone
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       osc1.type = 'sine';
@@ -285,7 +291,6 @@ export const TVDisplay: React.FC = () => {
       osc1.start(now);
       osc1.stop(now + 1.2);
 
-      // "Dong" - Low Tone
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.type = 'sine';
@@ -304,7 +309,6 @@ export const TVDisplay: React.FC = () => {
   const speak = (ticket: number, desk: string) => {
      if ('speechSynthesis' in window) {
          window.speechSynthesis.cancel();
-         // Delay speech slightly to allow Visuals + DingDong to happen first
          setTimeout(() => {
             const text = `Senha, ${ticket}. Balcão, ${desk}`;
             const msg = new SpeechSynthesisUtterance(text);
@@ -323,19 +327,12 @@ export const TVDisplay: React.FC = () => {
     const isRecall = (queueState as any).recall === true;
     
     if ((queueState.currentTicket > 0) && (isNewTicket || isRecall)) {
-      
-      // Update ref immediately to prevent double firing
       lastPlayedTicketRef.current = queueState.currentTicket;
-
-      // 1. Play Sound Immediately (Audio is faster than React render on slow TV)
-      // Actually, we delay slightly to let React render the NEW number first
       setTimeout(() => {
           setHighlight(true);
           playDingDong();
           speak(queueState.currentTicket, queueState.lastCalledDesk || '??');
-      }, 300); // 300ms delay to ensure DOM updated the number before attention is drawn
-
-      // 2. Turn off highlight after animation
+      }, 300);
       const timer = setTimeout(() => setHighlight(false), 5000); 
       return () => clearTimeout(timer);
     }
@@ -367,16 +364,14 @@ export const TVDisplay: React.FC = () => {
          command={playerCommand}
       />
 
-      {/* --- LAYOUT OPTIMIZED FOR 720p 32" TV --- */}
-      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-0 p-6">
+      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-8 p-8">
          
          {/* LEFT: MAIN DISPLAY (8 cols) */}
-         <div className="col-span-8 flex flex-col items-center justify-center relative border-r border-slate-800 pr-6">
+         <div className="col-span-8 flex flex-col items-center justify-center relative bg-slate-900/20 rounded-[3rem] border border-slate-800/50">
              
              <div className="flex flex-col items-center w-full">
-                 <h2 className="text-slate-500 font-bold text-[3vh] uppercase tracking-[0.4em] mb-[2vh]">Senha Atual</h2>
+                 <h2 className="text-slate-500 font-bold text-[3vh] uppercase tracking-[0.4em] mb-[4vh]">Senha Atual</h2>
                  
-                 {/* NUMBER - Removed Text-Shadow for Performance */}
                  <div className={`
                      text-[45vh] leading-none font-bold tracking-tighter transition-all duration-300
                      ${highlight 
@@ -386,47 +381,46 @@ export const TVDisplay: React.FC = () => {
                     {String(queueState.currentTicket).padStart(3, '0')}
                  </div>
 
-                 {/* DESK */}
                  <div className={`
-                     mt-[4vh] bg-slate-800 rounded-3xl w-[85%] py-[3vh] border
-                     flex flex-col items-center gap-1 transition-colors duration-500
-                     ${highlight ? 'border-[#2563eb] bg-blue-900/20' : 'border-slate-700'}
+                     mt-[6vh] bg-slate-800 rounded-3xl w-[85%] py-[4vh] border
+                     flex flex-col items-center gap-1 transition-colors duration-500 shadow-2xl
+                     ${highlight ? 'border-[#2563eb] bg-blue-900/30' : 'border-slate-700'}
                  `}>
-                     <span className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[1.5vh]">Dirija-se ao</span>
-                     <span className={`text-[8vh] font-bold leading-none ${highlight ? 'text-blue-400' : 'text-white'}`}>
+                     <span className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[1.8vh]">Dirija-se ao</span>
+                     <span className={`text-[9vh] font-bold leading-none ${highlight ? 'text-blue-400' : 'text-white'}`}>
                         {queueState.lastCalledDesk ? `Balcão ${String(queueState.lastCalledDesk).padStart(2, '0')}` : '---'}
                      </span>
                  </div>
              </div>
          </div>
 
-         {/* RIGHT: SIDEBAR (4 cols) */}
-         <div className="col-span-4 flex flex-col h-full pl-6 py-2 gap-4">
+         {/* RIGHT: SIDEBAR (4 cols) - SEPARATED BLOCKS */}
+         <div className="col-span-4 flex flex-col h-full gap-6">
              
-             {/* TOP: CLOCK & WEATHER */}
-             <div className="h-[18%] flex gap-4">
+             {/* BLOCK 1: CLOCK & WEATHER */}
+             <div className="h-[18%] bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex overflow-hidden">
                 <div className="flex-1"><DigitalClock /></div>
                 <div className="flex-1"><WeatherWidget /></div>
              </div>
 
-             {/* MIDDLE: HISTORY */}
-             <div className="flex-1 bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4 flex flex-col overflow-hidden relative">
-                 <div className="flex items-center gap-2 mb-4 text-slate-500 font-bold uppercase tracking-widest text-xs border-b border-slate-700 pb-2">
+             {/* BLOCK 2: HISTORY */}
+             <div className="flex-1 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex flex-col overflow-hidden p-5">
+                 <div className="flex items-center gap-2 mb-5 text-slate-500 font-bold uppercase tracking-widest text-xs border-b border-slate-700 pb-3">
                     <Clock className="w-3 h-3 text-[#2563eb]" />
                     Últimas Chamadas
                  </div>
 
-                 <div className="flex-1 flex flex-col gap-2">
+                 <div className="flex-1 flex flex-col gap-3">
                     {queueState.history.slice(0, 5).map((t, i) => {
-                       // Reduce opacity for older items
-                       const opacity = 1 - (i * 0.15); 
+                       const opacity = 1 - (i * 0.12); 
                        return (
                           <div key={i} style={{ opacity }} className={`
-                             flex items-center justify-between p-3 rounded-xl border transition-all duration-500
+                             flex items-center justify-between p-4 rounded-xl border transition-all duration-500 relative overflow-hidden
                              ${i === 0 && highlight 
-                                ? 'bg-[#2563eb]/20 border-[#2563eb] scale-105' 
-                                : 'bg-slate-800 border-slate-700/50'}
+                                ? 'bg-[#2563eb]/20 border-[#2563eb] scale-105 shadow-lg z-10' 
+                                : 'bg-slate-900/50 border-slate-700/50'}
                           `}>
+                             {i === 0 && highlight && <div className="absolute left-0 top-0 w-1 h-full bg-[#2563eb]"></div>}
                              <span className={`text-3xl font-bold tracking-tight ${i === 0 && highlight ? 'text-[#2563eb]' : 'text-slate-300'}`}>
                                 {String(t.number).padStart(3, '0')}
                              </span>
@@ -441,8 +435,8 @@ export const TVDisplay: React.FC = () => {
                  </div>
              </div>
 
-             {/* BOTTOM: NOW PLAYING (Safe zone, no overlap) */}
-             <div className="h-[12%] min-h-[80px]">
+             {/* BLOCK 3: MUSIC */}
+             <div className="h-[14%] min-h-[100px]">
                  <NowPlayingWidget music={queueState.music} />
              </div>
 
