@@ -6,7 +6,7 @@ import {
   Monitor, AlertCircle, Settings, 
   Menu, X, CheckCircle, AlertTriangle,
   BarChart3, Trophy, Calendar, LayoutDashboard,
-  Music, Play, Pause, Square, Link as LinkIcon
+  Music, Play, Pause, Square, Link as LinkIcon, Volume2
 } from 'lucide-react';
 import { AnalyticsData } from '../types';
 
@@ -103,7 +103,8 @@ const MusicController = ({ musicState, onSetMusic }: any) => {
             videoId: id,
             title: data.title || 'Música YouTube',
             thumbnail: data.thumbnail_url || `https://img.youtube.com/vi/${id}/0.jpg`,
-            isPlaying: true
+            isPlaying: true,
+            volume: 50 // Default volume
          });
          setUrl('');
       } catch (e) {
@@ -111,6 +112,10 @@ const MusicController = ({ musicState, onSetMusic }: any) => {
       } finally {
          setLoading(false);
       }
+   };
+
+   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      onSetMusic({ volume: Number(e.target.value) });
    };
 
    return (
@@ -121,33 +126,49 @@ const MusicController = ({ musicState, onSetMusic }: any) => {
          </h3>
 
          {musicState.videoId ? (
-            <div className="flex items-center gap-4">
-               <img src={musicState.thumbnail} className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
-               <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-slate-900 truncate">{musicState.title}</p>
-                  <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
-                     {musicState.isPlaying ? (
-                        <span className="text-green-600 font-bold flex items-center gap-1">
-                           <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Reproduzindo
-                        </span>
-                     ) : (
-                        <span className="text-slate-400">Pausado</span>
-                     )}
-                  </p>
+            <div className="flex flex-col gap-4">
+               <div className="flex items-center gap-4">
+                  <img src={musicState.thumbnail} className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
+                  <div className="flex-1 min-w-0">
+                     <p className="text-sm font-bold text-slate-900 truncate">{musicState.title}</p>
+                     <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                        {musicState.isPlaying ? (
+                           <span className="text-green-600 font-bold flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Reproduzindo
+                           </span>
+                        ) : (
+                           <span className="text-slate-400">Pausado</span>
+                        )}
+                     </p>
+                  </div>
+                  <div className="flex gap-2">
+                     <button 
+                        onClick={() => onSetMusic({ isPlaying: !musicState.isPlaying })}
+                        className="p-3 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-700 transition-colors"
+                     >
+                        {musicState.isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                     </button>
+                     <button 
+                        onClick={() => onSetMusic({ videoId: null, isPlaying: false })}
+                        className="p-3 bg-red-50 hover:bg-red-100 rounded-full text-red-600 transition-colors"
+                     >
+                        <Square className="w-5 h-5" />
+                     </button>
+                  </div>
                </div>
-               <div className="flex gap-2">
-                  <button 
-                     onClick={() => onSetMusic({ isPlaying: !musicState.isPlaying })}
-                     className="p-3 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-700 transition-colors"
-                  >
-                     {musicState.isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                  </button>
-                  <button 
-                     onClick={() => onSetMusic({ videoId: null, isPlaying: false })}
-                     className="p-3 bg-red-50 hover:bg-red-100 rounded-full text-red-600 transition-colors"
-                  >
-                     <Square className="w-5 h-5" />
-                  </button>
+               
+               {/* Volume Control */}
+               <div className="bg-slate-50 p-3 rounded-lg flex items-center gap-3">
+                  <Volume2 className="w-4 h-4 text-slate-500" />
+                  <input 
+                     type="range" 
+                     min="0" 
+                     max="100" 
+                     value={musicState.volume || 50} 
+                     onChange={handleVolumeChange}
+                     className="flex-1 accent-brand-600 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <span className="text-xs font-mono font-bold text-slate-500 w-8 text-right">{musicState.volume || 50}%</span>
                </div>
             </div>
          ) : (
