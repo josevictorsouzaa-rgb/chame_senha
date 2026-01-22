@@ -1,0 +1,5 @@
+{
+  "name": "AutoParts Queue Master",
+  "description": "A modern, robust queue management system for physical tickets, featuring real-time synchronization, persistence, and voice announcements.",
+  "requestFramePermissions": []
+}
