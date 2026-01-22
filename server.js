@@ -20,7 +20,9 @@ if (fs.existsSync(distPath)) {
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  pingTimeout: 60000, // Increased to 60s to tolerate laggy TV connections
+  pingInterval: 25000
 });
 
 const DATA_FILE = path.join(__dirname, 'data.json');
@@ -230,6 +232,11 @@ resetDailyStatsIfNeeded();
 io.on('connection', (socket) => {
   socket.emit('init', getPublicState());
 
+  // Error handler to prevent crashes on ECONNABORTED
+  socket.on('error', (err) => {
+    console.error(`Socket error [${socket.id}]:`, err.message);
+  });
+
   socket.on('login', ({ username, password, desk }, callback) => {
     const user = db.users.find(u => u.username === username && u.password === password);
     
@@ -268,7 +275,6 @@ io.on('connection', (socket) => {
     // Also update server state for play/pause consistency
     if (action === 'pause') db.music.isPlaying = false;
     if (action === 'play') db.music.isPlaying = true;
-    // Note: Next/Prev track logic is handled client-side on TV via YouTube API
     saveData();
   });
 

@@ -18,22 +18,16 @@ export const useQueueSocket = () => {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    // Determine connection URL
-    // In production (served by server.js), undefined works (same origin).
-    // In dev, we try to use the proxy (undefined -> localhost:3000/socket.io).
-    // However, if proxy fails, we might want to configure this differently.
-    // For robustness, we stick to 'undefined' to leverage the proxy or same-origin.
-    
     // Check if we are in development mode to enable debug logs
     const isDev = (import.meta as any).env?.DEV;
     if (isDev) console.log('Initializing socket connection...');
 
     socketRef.current = io(undefined, {
         transports: ['websocket', 'polling'],
-        reconnectionAttempts: Infinity, // Keep trying
+        reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        timeout: 20000,
+        timeout: 45000, // Increased timeout
         autoConnect: true,
         forceNew: true
     });
@@ -95,8 +89,6 @@ export const useQueueSocket = () => {
 
   const logout = () => {
       setCurrentUser(null);
-      // Do not disconnect socket, just clear user state
-      // We want to stay connected to receive updates
   };
 
   const callNext = useCallback(() => {

@@ -93,14 +93,16 @@ const MusicPlayer = ({
     isPlaying, 
     volume, 
     ducking, 
-    command 
+    command,
+    onPlayerReady 
 }: { 
     videoId: string | null, 
     playlistId: string | null,
     isPlaying: boolean, 
     volume: number, 
     ducking: boolean,
-    command: { action: string, timestamp: number } | null
+    command: { action: string, timestamp: number } | null,
+    onPlayerReady: (player: any) => void
 }) => {
    const playerRef = useRef<any>(null);
    const volumeRef = useRef(volume);
@@ -155,7 +157,7 @@ const MusicPlayer = ({
                },
                events: {
                    'onReady': (event: any) => {
-                       // Ensure it starts muted and playing
+                       onPlayerReady(event.target);
                        event.target.mute();
                        if (isPlaying) {
                            if (playlistId) {
@@ -166,15 +168,6 @@ const MusicPlayer = ({
                        }
                    },
                    'onStateChange': (event: any) => {
-                        // YT.PlayerState.PLAYING = 1
-                        if (event.data === 1) {
-                            // Video started playing (muted). Now we unmute.
-                            // Small delay to ensure browser acknowledges playback
-                            setTimeout(() => {
-                                event.target.unMute();
-                                event.target.setVolume(volumeRef.current);
-                            }, 1000);
-                        }
                         // YT.PlayerState.ENDED = 0
                         if (event.data === 0 && playlistId) {
                             event.target.nextVideo();
@@ -182,7 +175,6 @@ const MusicPlayer = ({
                    },
                    'onError': (event: any) => {
                        console.log("YT Error", event.data);
-                       // 150/101 = restricted. Skip.
                        if (playlistId) event.target.nextVideo();
                    }
                }
@@ -221,7 +213,6 @@ const MusicPlayer = ({
    return <div id="yt-player-frame" className="absolute opacity-0 pointer-events-none"></div>;
 };
 
-// Moved inside Sidebar to avoid overlap
 const NowPlayingWidget = ({ music }: { music: any }) => {
    if ((!music.videoId && !music.playlistId) || !music.isPlaying) return (
        <div className="h-full bg-slate-800 rounded-2xl border border-slate-700 p-4 flex items-center justify-center gap-2 text-slate-500">
@@ -232,9 +223,7 @@ const NowPlayingWidget = ({ music }: { music: any }) => {
 
    return (
       <div className="h-full bg-slate-800 rounded-2xl border border-blue-900/50 p-4 flex items-center gap-4 relative overflow-hidden shadow-lg">
-         {/* Animated Background Bar */}
          <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-400 animate-pulse w-full"></div>
-         
          <div className="relative shrink-0">
             <img src={music.thumbnail} className="w-12 h-12 rounded-lg object-cover bg-slate-900 shadow-md" />
          </div>
@@ -254,6 +243,7 @@ export const TVDisplay: React.FC = () => {
   const [highlight, setHighlight] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const playerApiRef = useRef<any>(null); // REF TO HOLD YT PLAYER INSTANCE
   
   const lastPlayedTicketRef = useRef(0);
 
@@ -268,16 +258,14 @@ export const TVDisplay: React.FC = () => {
 
   const initAudioSystem = () => {
     try {
+      // 1. Initialize Audio Context (Ding Dong)
       if (!audioCtxRef.current) {
         const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioCtor) audioCtxRef.current = new AudioCtor();
       }
-      
       const ctx = audioCtxRef.current;
       if (ctx) {
-        if (ctx.state === 'suspended') {
-            ctx.resume();
-        }
+        if (ctx.state === 'suspended') ctx.resume();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         gain.gain.value = 0;
@@ -287,8 +275,20 @@ export const TVDisplay: React.FC = () => {
         osc.stop(0.1);
       }
       
+      // 2. Unmute YouTube Player (Bridge User Gesture)
+      if (playerApiRef.current && typeof playerApiRef.current.unMute === 'function') {
+         console.log("Unmuting player via user gesture...");
+         playerApiRef.current.unMute();
+         playerApiRef.current.setVolume(queueState.music.volume || 50);
+         // Force play to be sure
+         if(queueState.music.isPlaying) playerApiRef.current.playVideo();
+      }
+
       setHasStarted(true);
-    } catch (e) { setHasStarted(true); }
+    } catch (e) { 
+        console.error(e);
+        setHasStarted(true); 
+    }
   };
 
   const playDingDong = () => {
@@ -298,7 +298,6 @@ export const TVDisplay: React.FC = () => {
          if(ctx) ctx.resume();
          return; 
       }
-      
       const now = ctx.currentTime;
       const masterGain = ctx.createGain();
       masterGain.connect(ctx.destination);
@@ -327,7 +326,6 @@ export const TVDisplay: React.FC = () => {
       gain2.connect(masterGain);
       osc2.start(now + 0.5);
       osc2.stop(now + 2.0);
-
     } catch (e) { console.error(e); }
   };
 
@@ -346,6 +344,7 @@ export const TVDisplay: React.FC = () => {
   };
 
   useEffect(() => {
+    // Only play sound if user has started the context
     if (!hasStarted) return;
     
     const isNewTicket = queueState.currentTicket !== lastPlayedTicketRef.current;
@@ -363,23 +362,10 @@ export const TVDisplay: React.FC = () => {
     }
   }, [lastUpdateTimestamp, hasStarted, queueState.currentTicket, (queueState as any).recall]);
 
-  if (!hasStarted) {
-    return (
-      <div onClick={initAudioSystem} className="h-screen w-screen bg-slate-950 flex items-center justify-center cursor-pointer overflow-hidden relative">
-        <div className="z-10 text-center">
-           <div className="w-24 h-24 bg-[#2563eb] rounded-full mx-auto flex items-center justify-center shadow-lg border-4 border-slate-800 animate-pulse mb-6">
-              <Music className="w-10 h-10 text-white" />
-           </div>
-           <h1 className="text-3xl font-bold text-white mb-2">AutoParts TV</h1>
-           <p className="text-slate-400 text-sm uppercase tracking-widest">Toque para iniciar Áudio e Vídeo</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-screen w-screen bg-slate-950 text-white flex overflow-hidden font-sans relative select-none">
       
+      {/* ALWAYS RENDER PLAYER TO PRELOAD IT */}
       <MusicPlayer 
          videoId={queueState.music?.videoId} 
          playlistId={queueState.music?.playlistId}
@@ -387,9 +373,29 @@ export const TVDisplay: React.FC = () => {
          volume={queueState.music?.volume || 50}
          ducking={highlight} 
          command={playerCommand}
+         onPlayerReady={(player) => {
+             playerApiRef.current = player;
+         }}
       />
 
-      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-8 p-10">
+      {/* OVERLAY: CLICK TO START */}
+      {!hasStarted && (
+        <div 
+          onClick={initAudioSystem} 
+          className="absolute inset-0 z-50 bg-slate-950 flex items-center justify-center cursor-pointer overflow-hidden animate-in fade-in duration-500"
+        >
+            <div className="z-10 text-center">
+                <div className="w-24 h-24 bg-[#2563eb] rounded-full mx-auto flex items-center justify-center shadow-lg border-4 border-slate-800 animate-pulse mb-6">
+                    <Music className="w-10 h-10 text-white" />
+                </div>
+                <h1 className="text-3xl font-bold text-white mb-2">AutoParts TV</h1>
+                <p className="text-slate-400 text-sm uppercase tracking-widest">Toque para iniciar Áudio e Vídeo</p>
+            </div>
+        </div>
+      )}
+
+      {/* MAIN DISPLAY - HIDDEN UNTIL STARTED (OR JUST BEHIND OVERLAY) */}
+      <div className={`absolute inset-0 z-10 grid grid-cols-12 gap-8 p-10 transition-opacity duration-1000 ${hasStarted ? 'opacity-100' : 'opacity-0'}`}>
          
          {/* LEFT: MAIN DISPLAY (8 cols) */}
          <div className="col-span-8 flex flex-col items-center justify-center relative bg-slate-900/20 rounded-[3rem] border border-slate-800/50">
@@ -419,8 +425,8 @@ export const TVDisplay: React.FC = () => {
              </div>
          </div>
 
-         {/* RIGHT: SIDEBAR (4 cols) - HUGE GAP */}
-         <div className="col-span-4 flex flex-col h-full gap-10">
+         {/* RIGHT: SIDEBAR (4 cols) - GAP 16 (BIGGER) */}
+         <div className="col-span-4 flex flex-col h-full gap-16">
              
              {/* BLOCK 1: CLOCK & WEATHER */}
              <div className="h-[20%] bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex overflow-hidden">
@@ -428,7 +434,7 @@ export const TVDisplay: React.FC = () => {
                 <div className="flex-1"><WeatherWidget /></div>
              </div>
 
-             {/* BLOCK 2: HISTORY - STRONGER FADE */}
+             {/* BLOCK 2: HISTORY - STRONGER AGGRESSIVE FADE */}
              <div className="flex-1 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex flex-col overflow-hidden p-6">
                  <div className="flex items-center gap-2 mb-6 text-slate-500 font-bold uppercase tracking-widest text-xs border-b border-slate-700 pb-4">
                     <Clock className="w-3 h-3 text-[#2563eb]" />
@@ -437,13 +443,8 @@ export const TVDisplay: React.FC = () => {
 
                  <div className="flex-1 flex flex-col gap-4">
                     {queueState.history.slice(0, 5).map((t, i) => {
-                       // AGGRESSIVE FADE LOGIC
-                       // 0 -> 1.0 (Active)
-                       // 1 -> 0.60
-                       // 2 -> 0.40
-                       // 3 -> 0.20
-                       // 4 -> 0.10
-                       const opacity = i === 0 ? 1 : Math.max(0.1, 0.8 - (i * 0.2)); 
+                       // AGGRESSIVE FADE: 100% -> 30% -> 15% -> 10% -> 5%
+                       const opacity = i === 0 ? 1 : Math.max(0.05, 0.4 - (i * 0.15));
                        
                        return (
                           <div key={i} style={{ opacity }} className={`
