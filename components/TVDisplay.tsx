@@ -38,15 +38,13 @@ const WeatherWidget: React.FC = () => {
   const currentCode = weather.current.weather_code;
 
   return (
-    <div className="flex flex-col justify-center items-center bg-slate-900/40 backdrop-blur-md rounded-2xl border border-slate-700/50 shadow-xl h-full w-full relative overflow-hidden group">
-       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-       
+    <div className="flex flex-col justify-center items-center bg-slate-800/80 rounded-2xl border border-slate-700 h-full w-full relative overflow-hidden">
        <div className="flex items-center gap-4 relative z-10">
-          <div className="animate-pulse-slow drop-shadow-lg">
-            {getWeatherIcon(currentCode, "w-12 h-12")}
+          <div className="animate-pulse-slow">
+            {getWeatherIcon(currentCode, "w-10 h-10")}
           </div>
           <div className="flex flex-col">
-             <span className="text-5xl font-bold text-white tracking-tighter leading-none">{currentTemp}°</span>
+             <span className="text-4xl font-bold text-white tracking-tighter leading-none">{currentTemp}°</span>
              <div className="flex items-center gap-1 mt-1 text-slate-400">
                 <MapPin className="w-3 h-3" />
                 <span className="text-[10px] font-bold uppercase tracking-widest">Piracicaba</span>
@@ -65,11 +63,9 @@ const DigitalClock: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col justify-center items-center bg-slate-900/40 backdrop-blur-md rounded-2xl border border-slate-700/50 shadow-xl h-full w-full relative overflow-hidden group">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-      
+    <div className="flex flex-col justify-center items-center bg-slate-800/80 rounded-2xl border border-slate-700 h-full w-full relative overflow-hidden">
       <div className="relative z-10 text-center">
-          <div className="text-[5vh] font-sans font-bold text-white tracking-tight leading-none tabular-nums drop-shadow-2xl">
+          <div className="text-[5vh] font-sans font-bold text-white tracking-tight leading-none tabular-nums">
             {time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
           </div>
           <div className="flex items-center justify-center gap-2 mt-2 text-brand-400">
@@ -107,7 +103,6 @@ const MusicPlayer = ({
     command: { action: string, timestamp: number } | null
 }) => {
    const playerRef = useRef<any>(null);
-   const currentVolRef = useRef(volume);
 
    useEffect(() => {
        if (!window.YT) {
@@ -122,21 +117,27 @@ const MusicPlayer = ({
        if (!window.YT || (!videoId && !playlistId)) return;
 
        const createPlayer = () => {
-           if (playerRef.current) playerRef.current.destroy();
+           if (playerRef.current) {
+                // If player exists, just load new content
+                if (playlistId) playerRef.current.loadPlaylist({ list: playlistId, listType: 'playlist' });
+                else if (videoId) playerRef.current.loadVideoById(videoId);
+                return;
+           }
 
            playerRef.current = new window.YT.Player('yt-player-frame', {
                height: '1',
                width: '1',
                playerVars: {
-                   'autoplay': 1, // FORCE AUTOPLAY
+                   'autoplay': 1,
                    'controls': 0,
                    'disablekb': 1,
                    'fs': 0,
                    'rel': 0,
                    'listType': playlistId ? 'playlist' : undefined,
                    'list': playlistId,
-                   'loop': 1, // Loop playlists
+                   'loop': 1,
                    'playsinline': 1,
+                   'origin': window.location.origin 
                },
                events: {
                    'onReady': (event: any) => {
@@ -146,7 +147,6 @@ const MusicPlayer = ({
                        }
                    },
                    'onStateChange': (event: any) => {
-                        // If ended (0), play next
                         if (event.data === 0 && playlistId) {
                             event.target.nextVideo();
                         }
@@ -167,7 +167,6 @@ const MusicPlayer = ({
    useEffect(() => {
        if (!playerRef.current || !command) return;
        const player = playerRef.current;
-       
        if (typeof player.playVideo !== 'function') return;
 
        switch(command.action) {
@@ -181,34 +180,35 @@ const MusicPlayer = ({
    // Handle Volume Ducking
    useEffect(() => {
       if (!playerRef.current || typeof playerRef.current.setVolume !== 'function') return;
-      const targetVolume = ducking ? 10 : volume; // Duck to 10%
+      const targetVolume = ducking ? 10 : volume; 
       playerRef.current.setVolume(targetVolume);
-      currentVolRef.current = targetVolume;
    }, [ducking, volume]);
 
    return <div id="yt-player-frame" className="absolute opacity-0 pointer-events-none"></div>;
 };
 
-const NowPlaying = ({ music }: { music: any }) => {
-   if ((!music.videoId && !music.playlistId) || !music.isPlaying) return null;
+// Moved inside Sidebar to avoid overlap
+const NowPlayingWidget = ({ music }: { music: any }) => {
+   if ((!music.videoId && !music.playlistId) || !music.isPlaying) return (
+       <div className="mt-auto bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4 flex items-center justify-center gap-2 text-slate-600">
+           <Music className="w-4 h-4" />
+           <span className="text-xs font-medium uppercase tracking-wider">Silêncio</span>
+       </div>
+   );
 
    return (
-      <div className="absolute bottom-6 left-8 z-30 flex items-center gap-4 bg-slate-900/90 backdrop-blur-xl border border-slate-700/50 p-4 rounded-2xl pr-8 max-w-[35vw] animate-in slide-in-from-bottom-10 fade-in duration-700 shadow-2xl">
+      <div className="mt-auto bg-slate-800 rounded-2xl border border-blue-900/30 p-4 flex items-center gap-3 relative overflow-hidden">
+         <div className="absolute top-0 left-0 w-1 h-full bg-[#2563eb]"></div>
+         
          <div className="relative shrink-0">
-            <img src={music.thumbnail} className="w-12 h-12 rounded-lg object-cover shadow-lg ring-1 ring-white/10" />
-            <div className="absolute -bottom-2 -right-2 bg-[#2563eb] rounded-full p-1.5 shadow-lg flex items-center justify-center">
-               <Music className="w-3 h-3 text-white animate-spin-slow" />
-            </div>
+            <img src={music.thumbnail} className="w-10 h-10 rounded-md object-cover bg-slate-900" />
          </div>
-         <div className="flex-1 min-w-0">
-             <div className="flex items-center gap-2 mb-0.5">
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tocando Agora</span>
+         <div className="flex-1 min-w-0 z-10">
+             <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Som Ambiente</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
              </div>
-             <p className="text-white font-bold leading-tight line-clamp-1 text-sm">{music.title}</p>
+             <p className="text-white font-bold leading-tight line-clamp-1 text-xs">{music.title}</p>
          </div>
       </div>
    );
@@ -237,7 +237,23 @@ export const TVDisplay: React.FC = () => {
         const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioCtor) audioCtxRef.current = new AudioCtor();
       }
-      if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
+      
+      const ctx = audioCtxRef.current;
+      if (ctx) {
+        // Unlock browser audio policy
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+        // Play a silent sound to force wake up audio subsystem
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(0);
+        osc.stop(0.1);
+      }
+      
       setHasStarted(true);
     } catch (e) { setHasStarted(true); }
   };
@@ -245,36 +261,42 @@ export const TVDisplay: React.FC = () => {
   const playDingDong = () => {
     try {
       const ctx = audioCtxRef.current;
-      if (!ctx) return;
+      if (!ctx || ctx.state !== 'running') {
+         // Attempt recovery
+         if(ctx) ctx.resume();
+         return; 
+      }
+      
       const now = ctx.currentTime;
       const masterGain = ctx.createGain();
       masterGain.connect(ctx.destination);
-      masterGain.gain.value = 0.8;
+      masterGain.gain.value = 1.0; // Max volume
 
-      // Elegant Ding Dong
+      // "Ding" - High Tone
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
-      osc1.type = 'sine'; // Smoother sine wave
-      osc1.frequency.setValueAtTime(600, now);
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(660, now);
       gain1.gain.setValueAtTime(0, now);
-      gain1.gain.linearRampToValueAtTime(1, now + 0.05);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+      gain1.gain.linearRampToValueAtTime(1, now + 0.02);
+      gain1.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
       osc1.connect(gain1);
       gain1.connect(masterGain);
       osc1.start(now);
-      osc1.stop(now + 1.5);
+      osc1.stop(now + 1.2);
 
+      // "Dong" - Low Tone
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(450, now + 0.8); // Lower pitch for Dong
-      gain2.gain.setValueAtTime(0, now + 0.8);
-      gain2.gain.linearRampToValueAtTime(1, now + 0.85);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 3.0);
+      osc2.frequency.setValueAtTime(550, now + 0.5);
+      gain2.gain.setValueAtTime(0, now + 0.5);
+      gain2.gain.linearRampToValueAtTime(1, now + 0.55);
+      gain2.gain.exponentialRampToValueAtTime(0.01, now + 2.0);
       osc2.connect(gain2);
       gain2.connect(masterGain);
-      osc2.start(now + 0.8);
-      osc2.stop(now + 3.0);
+      osc2.start(now + 0.5);
+      osc2.stop(now + 2.0);
 
     } catch (e) { console.error(e); }
   };
@@ -282,14 +304,15 @@ export const TVDisplay: React.FC = () => {
   const speak = (ticket: number, desk: string) => {
      if ('speechSynthesis' in window) {
          window.speechSynthesis.cancel();
-         // Small delay to let Ding Dong finish partialy
+         // Delay speech slightly to allow Visuals + DingDong to happen first
          setTimeout(() => {
             const text = `Senha, ${ticket}. Balcão, ${desk}`;
             const msg = new SpeechSynthesisUtterance(text);
             msg.lang = 'pt-BR';
-            msg.rate = 0.9; // Slightly slower for clarity
+            msg.rate = 1.0;
+            msg.volume = 1.0;
             window.speechSynthesis.speak(msg);
-         }, 1000);
+         }, 1200);
       }
   };
 
@@ -297,20 +320,23 @@ export const TVDisplay: React.FC = () => {
     if (!hasStarted) return;
     
     const isNewTicket = queueState.currentTicket !== lastPlayedTicketRef.current;
+    const isRecall = (queueState as any).recall === true;
     
-    const shouldPlay = (queueState.currentTicket > 0) && (
-       isNewTicket || 
-       (queueState.currentTicket === lastPlayedTicketRef.current && (queueState as any).recall === true) 
-    );
-
-    if (shouldPlay || ((queueState as any).recall)) {
-      setHighlight(true);
-      playDingDong();
-      speak(queueState.currentTicket, queueState.lastCalledDesk || '??');
+    if ((queueState.currentTicket > 0) && (isNewTicket || isRecall)) {
       
+      // Update ref immediately to prevent double firing
       lastPlayedTicketRef.current = queueState.currentTicket;
 
-      const timer = setTimeout(() => setHighlight(false), 8000); 
+      // 1. Play Sound Immediately (Audio is faster than React render on slow TV)
+      // Actually, we delay slightly to let React render the NEW number first
+      setTimeout(() => {
+          setHighlight(true);
+          playDingDong();
+          speak(queueState.currentTicket, queueState.lastCalledDesk || '??');
+      }, 300); // 300ms delay to ensure DOM updated the number before attention is drawn
+
+      // 2. Turn off highlight after animation
+      const timer = setTimeout(() => setHighlight(false), 5000); 
       return () => clearTimeout(timer);
     }
   }, [lastUpdateTimestamp, hasStarted, queueState.currentTicket, (queueState as any).recall]);
@@ -318,17 +344,12 @@ export const TVDisplay: React.FC = () => {
   if (!hasStarted) {
     return (
       <div onClick={initAudioSystem} className="h-screen w-screen bg-slate-950 flex items-center justify-center cursor-pointer overflow-hidden relative">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950"></div>
-        <div className="text-center space-y-8 animate-pulse relative z-10">
-           <div className="w-32 h-32 bg-[#2563eb] rounded-[2rem] mx-auto flex items-center justify-center shadow-[0_0_80px_rgba(37,99,235,0.6)] border border-blue-400/30">
-              <Clock className="w-16 h-16 text-white" />
+        <div className="z-10 text-center">
+           <div className="w-24 h-24 bg-[#2563eb] rounded-full mx-auto flex items-center justify-center shadow-lg border-4 border-slate-800 animate-pulse mb-6">
+              <Music className="w-10 h-10 text-white" />
            </div>
-           <div>
-             <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">Queue Master TV</h1>
-             <p className="text-blue-200 font-bold tracking-[0.2em] uppercase text-sm border border-blue-500/30 bg-blue-500/10 py-3 px-8 rounded-full inline-block backdrop-blur-md">
-                Toque para Iniciar Sistema
-             </p>
-           </div>
+           <h1 className="text-3xl font-bold text-white mb-2">AutoParts TV</h1>
+           <p className="text-slate-400 text-sm uppercase tracking-widest">Toque para iniciar Áudio e Vídeo</p>
         </div>
       </div>
     );
@@ -346,93 +367,72 @@ export const TVDisplay: React.FC = () => {
          command={playerCommand}
       />
 
-      <NowPlaying music={queueState.music} />
-
-      {/* Modern Background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black z-0"></div>
-      <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.15] z-0 pointer-events-none mix-blend-overlay"></div>
-
-      {/* --- NEW GRID LAYOUT WITH GAPS --- */}
-      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-0 p-8">
+      {/* --- LAYOUT OPTIMIZED FOR 720p 32" TV --- */}
+      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-0 p-6">
          
-         {/* LEFT COLUMN: MAIN DISPLAY (Col Span 8) */}
-         <div className="col-span-8 flex flex-col items-center justify-center relative">
+         {/* LEFT: MAIN DISPLAY (8 cols) */}
+         <div className="col-span-8 flex flex-col items-center justify-center relative border-r border-slate-800 pr-6">
              
-             {/* Dynamic Glow Background */}
-             <div className={`
-                 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%]
-                 rounded-full blur-[120px] transition-all duration-700 ease-out
-                 ${highlight ? 'bg-[#2563eb]/30 opacity-100 scale-110' : 'bg-[#2563eb]/5 opacity-10 scale-90'}
-             `}></div>
-
-             <div className="relative z-10 flex flex-col items-center w-full">
-                 <h2 className="text-blue-200/50 font-bold text-[3vh] uppercase tracking-[0.6em] mb-[4vh] animate-pulse">Senha Atual</h2>
+             <div className="flex flex-col items-center w-full">
+                 <h2 className="text-slate-500 font-bold text-[3vh] uppercase tracking-[0.4em] mb-[2vh]">Senha Atual</h2>
                  
-                 {/* BIG NUMBER - POP ANIMATION BLUE */}
+                 {/* NUMBER - Removed Text-Shadow for Performance */}
                  <div className={`
-                     text-[42vh] leading-none font-bold tracking-tighter transition-all duration-300
+                     text-[45vh] leading-none font-bold tracking-tighter transition-all duration-300
                      ${highlight 
-                        ? 'text-[#2563eb] animate-pop-blue drop-shadow-[0_0_100px_rgba(37,99,235,0.8)]' 
-                        : 'text-white scale-100 drop-shadow-2xl'}
+                        ? 'text-[#2563eb] animate-pop-blue scale-110' 
+                        : 'text-white scale-100'}
                  `}>
                     {String(queueState.currentTicket).padStart(3, '0')}
                  </div>
 
-                 {/* DESK CARD */}
+                 {/* DESK */}
                  <div className={`
-                     mt-[6vh] backdrop-blur-2xl border rounded-[2rem] w-[80%] max-w-3xl py-[4vh]
-                     flex flex-col items-center gap-2 shadow-2xl transition-all duration-700
-                     ${highlight 
-                        ? 'border-[#2563eb]/50 bg-[#2563eb]/20 translate-y-0 shadow-[#2563eb]/20' 
-                        : 'border-slate-800/50 bg-slate-900/40 shadow-black/50'}
+                     mt-[4vh] bg-slate-800 rounded-3xl w-[85%] py-[3vh] border
+                     flex flex-col items-center gap-1 transition-colors duration-500
+                     ${highlight ? 'border-[#2563eb] bg-blue-900/20' : 'border-slate-700'}
                  `}>
-                     <span className="text-slate-400 font-bold uppercase tracking-[0.3em] text-[1.8vh]">Dirija-se ao</span>
-                     <span className={`text-[10vh] font-bold leading-none ${highlight ? 'text-blue-100' : 'text-white'}`}>
+                     <span className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[1.5vh]">Dirija-se ao</span>
+                     <span className={`text-[8vh] font-bold leading-none ${highlight ? 'text-blue-400' : 'text-white'}`}>
                         {queueState.lastCalledDesk ? `Balcão ${String(queueState.lastCalledDesk).padStart(2, '0')}` : '---'}
                      </span>
                  </div>
              </div>
          </div>
 
-         {/* RIGHT COLUMN: SIDEBAR (Col Span 4) */}
-         {/* Added large left padding/gap to visually separate from main number */}
-         <div className="col-span-4 flex flex-col h-full pl-8 py-4 gap-6">
+         {/* RIGHT: SIDEBAR (4 cols) */}
+         <div className="col-span-4 flex flex-col h-full pl-6 py-2 gap-4">
              
-             {/* TOP WIDGETS ROW - SEPARATED */}
-             <div className="h-[22%] flex gap-6">
-                <div className="flex-1">
-                   <DigitalClock />
-                </div>
-                <div className="flex-1">
-                   <WeatherWidget />
-                </div>
+             {/* TOP: CLOCK & WEATHER */}
+             <div className="h-[18%] flex gap-4">
+                <div className="flex-1"><DigitalClock /></div>
+                <div className="flex-1"><WeatherWidget /></div>
              </div>
 
-             {/* HISTORY LIST - SEPARATED CONTAINER */}
-             <div className="flex-1 bg-slate-900/40 backdrop-blur-md rounded-3xl border border-slate-800/50 p-6 flex flex-col shadow-2xl overflow-hidden relative">
-                 <div className="flex items-center gap-3 mb-6 text-slate-500 font-bold uppercase tracking-widest text-sm shrink-0 border-b border-slate-800 pb-4">
-                    <Clock className="w-4 h-4 text-blue-500" />
+             {/* MIDDLE: HISTORY */}
+             <div className="flex-1 bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4 flex flex-col overflow-hidden relative">
+                 <div className="flex items-center gap-2 mb-4 text-slate-500 font-bold uppercase tracking-widest text-xs border-b border-slate-700 pb-2">
+                    <Clock className="w-3 h-3 text-[#2563eb]" />
                     Últimas Chamadas
                  </div>
 
-                 <div className="flex-1 flex flex-col gap-3">
-                    {queueState.history.slice(0, 6).map((t, i) => {
-                       const opacity = i === 0 ? 1 : i === 1 ? 0.8 : i === 2 ? 0.6 : i === 3 ? 0.4 : 0.2;
-                       
+                 <div className="flex-1 flex flex-col gap-2">
+                    {queueState.history.slice(0, 5).map((t, i) => {
+                       // Reduce opacity for older items
+                       const opacity = 1 - (i * 0.15); 
                        return (
                           <div key={i} style={{ opacity }} className={`
-                             flex items-center justify-between p-4 rounded-2xl border transition-all duration-700
+                             flex items-center justify-between p-3 rounded-xl border transition-all duration-500
                              ${i === 0 && highlight 
-                                ? 'bg-[#2563eb]/20 border-[#2563eb]/50 scale-[1.02] shadow-lg shadow-blue-900/20 translate-x-2' 
-                                : 'bg-slate-800/30 border-slate-700/30'}
+                                ? 'bg-[#2563eb]/20 border-[#2563eb] scale-105' 
+                                : 'bg-slate-800 border-slate-700/50'}
                           `}>
-                             <span className={`text-4xl font-bold tracking-tight leading-none ${i === 0 && highlight ? 'text-[#2563eb]' : 'text-slate-300'}`}>
+                             <span className={`text-3xl font-bold tracking-tight ${i === 0 && highlight ? 'text-[#2563eb]' : 'text-slate-300'}`}>
                                 {String(t.number).padStart(3, '0')}
                              </span>
-                             <div className="text-right leading-tight">
-                                <span className="block text-[10px] uppercase font-bold text-slate-500 mb-0.5">Balcão</span>
-                                <span className={`text-xl font-bold ${i === 0 && highlight ? 'text-blue-200' : 'text-slate-400'}`}>
-                                   {String(t.desk).padStart(2, '0')}
+                             <div className="text-right">
+                                <span className={`text-lg font-bold ${i === 0 && highlight ? 'text-blue-200' : 'text-slate-500'}`}>
+                                   Balcão {String(t.desk).padStart(2, '0')}
                                 </span>
                              </div>
                           </div>
@@ -440,6 +440,12 @@ export const TVDisplay: React.FC = () => {
                     })}
                  </div>
              </div>
+
+             {/* BOTTOM: NOW PLAYING (Safe zone, no overlap) */}
+             <div className="h-[12%] min-h-[80px]">
+                 <NowPlayingWidget music={queueState.music} />
+             </div>
+
          </div>
 
       </div>
