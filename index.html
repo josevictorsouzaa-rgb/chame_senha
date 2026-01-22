@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AutoParts Queue Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
@@ -13,13 +13,26 @@
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
               mono: ['JetBrains Mono', 'monospace'],
+              tech: ['Rajdhani', 'sans-serif'],
             },
             colors: {
               gray: {
                 850: '#1f2937',
                 900: '#111827',
                 950: '#030712',
+              },
+              carbon: {
+                800: '#1a1a1a',
+                900: '#0f0f0f',
+              },
+              amber: {
+                500: '#f59e0b',
+                600: '#d97706',
+                glow: '#fbbf24',
               }
+            },
+            backgroundImage: {
+              'grid-pattern': "linear-gradient(to right, #262626 1px, transparent 1px), linear-gradient(to bottom, #262626 1px, transparent 1px)",
             }
           }
         }
@@ -27,15 +40,15 @@
     </script>
     <style>
       body {
-        background-color: #030712;
+        background-color: #0f0f0f;
         color: white;
         margin: 0;
         padding: 0;
         overflow: hidden;
       }
-      /* Smooth fade for numbering */
-      .number-transition {
-        transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      .bg-grid {
+        background-size: 40px 40px;
+        mask-image: linear-gradient(to bottom, transparent, 5%, black, 95%, transparent);
       }
     </style>
   <script type="importmap">
