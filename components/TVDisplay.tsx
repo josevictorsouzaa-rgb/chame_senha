@@ -275,14 +275,20 @@ export const TVDisplay: React.FC = () => {
         osc.stop(0.1);
       }
       
-      // 2. Unmute YouTube Player (Bridge User Gesture)
-      if (playerApiRef.current && typeof playerApiRef.current.unMute === 'function') {
-         console.log("Unmuting player via user gesture...");
-         playerApiRef.current.unMute();
-         playerApiRef.current.setVolume(queueState.music.volume || 50);
-         // Force play to be sure
-         if(queueState.music.isPlaying) playerApiRef.current.playVideo();
-      }
+      // 2. Unmute YouTube Player (Aggressive Strategy)
+      // Tenta desmutar repetidamente por alguns milissegundos para garantir que o Player API respondeu
+      console.log("Starting aggressive unmute sequence...");
+      const interval = setInterval(() => {
+        if (playerApiRef.current && typeof playerApiRef.current.unMute === 'function') {
+            console.log("Player found. Unmuting...");
+            playerApiRef.current.unMute();
+            playerApiRef.current.setVolume(queueState.music.volume || 50);
+            if (queueState.music.isPlaying) playerApiRef.current.playVideo();
+            clearInterval(interval);
+        }
+      }, 200);
+
+      setTimeout(() => clearInterval(interval), 3000); // Stop trying after 3 seconds
 
       setHasStarted(true);
     } catch (e) { 

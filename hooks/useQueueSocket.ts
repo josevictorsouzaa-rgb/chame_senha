@@ -27,7 +27,7 @@ export const useQueueSocket = () => {
         reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        timeout: 20000,
+        timeout: 20000, // Reduced timeout to fail fast and retry
         autoConnect: true
     });
 
