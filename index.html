@@ -3,54 +3,63 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AutoParts Queue Master</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
-            },
-            colors: {
-              gray: {
-                850: '#1f2937',
-                900: '#111827',
-                950: '#030712',
-              }
-            }
-          }
-        }
-      }
-    </script>
-    <style>
-      body {
-        background-color: #030712;
-        color: white;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-      }
-      /* Smooth fade for numbering */
-      .number-transition {
-        transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-    </style>
+    <title>Queue Master Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
+    "express": "https://esm.sh/express@^5.2.1",
+    "http": "https://esm.sh/http@^0.0.1-security",
+    "socket.io": "https://esm.sh/socket.io@^4.8.3",
+    "fs": "https://esm.sh/fs@^0.0.1-security",
+    "path": "https://esm.sh/path@^0.12.7",
+    "cors": "https://esm.sh/cors@^2.8.6",
+    "url": "https://esm.sh/url@^0.11.4",
+    "socket.io-client": "https://esm.sh/socket.io-client@^4.8.3",
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "socket.io-client": "https://esm.sh/socket.io-client@^4.8.3"
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "@vitejs/plugin-legacy": "https://esm.sh/@vitejs/plugin-legacy@^7.2.1"
   }
 }
 </script>
 </head>
   <body>
+    <div id="tv-debug-layer"></div>
     <div id="root"></div>
+    
+    <!-- TV Compatibility Error Handler -->
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        // Ignora erros genéricos de script cross-origin (comuns em TVs com CDNs)
+        if (typeof message === 'string' && message.indexOf('Script error') !== -1) {
+            return false;
+        }
+
+        const debug = document.getElementById('tv-debug-layer');
+        if (debug) {
+          debug.style.display = 'block';
+          // Limpa mensagens antigas para não cobrir a tela inteira
+          if (debug.innerHTML.length > 500) debug.innerHTML = '';
+          debug.innerHTML += `[ERROR] ${message} \nAt: ${source}:${lineno}\n\n`;
+        }
+      };
+
+      window.onunhandledrejection = function(event) {
+        const debug = document.getElementById('tv-debug-layer');
+        if (debug) {
+          // Ignora erros de redimensionamento comuns em layouts responsivos
+          if (event.reason && String(event.reason).includes('ResizeObserver')) return;
+
+          debug.style.display = 'block';
+          debug.innerHTML += `[PROMISE] ${event.reason}\n\n`;
+        }
+      };
+    </script>
+
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
