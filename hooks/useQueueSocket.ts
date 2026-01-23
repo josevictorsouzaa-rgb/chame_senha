@@ -1,13 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { QueueState, User, AuthResponse, LoginPayload, AnalyticsData, MusicState } from '../types';
+import { QueueState, User, AuthResponse } from '../types';
 
-// DYNAMIC SERVER URL
-const getSocketUrl = () => {
-  const protocol = window.location.protocol;
-  const hostname = window.location.hostname;
-  return `${protocol}//${hostname}:3001`;
-};
+const SERVER_URL = 'http://localhost:3001';
 
 export const useQueueSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -15,8 +10,7 @@ export const useQueueSocket = () => {
     currentTicket: 0,
     lastCalledDesk: null,
     history: [],
-    stats: { totalCallsToday: 0, averageServiceTime: 0 },
-    music: { videoId: null, title: '', thumbnail: '', isPlaying: false, volume: 50 }
+    stats: { totalCallsToday: 0, averageServiceTime: 0 }
   });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number>(0);
@@ -24,25 +18,20 @@ export const useQueueSocket = () => {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const serverUrl = getSocketUrl();
-    console.log('Connecting to socket at:', serverUrl);
-    
-    socketRef.current = io(serverUrl, {
+    socketRef.current = io(SERVER_URL, {
         transports: ['websocket', 'polling'],
-        reconnectionAttempts: 10, 
-        timeout: 20000
+        reconnectionAttempts: 5,
     });
 
     const socket = socketRef.current;
 
     socket.on('connect', () => {
         setIsConnected(true);
-        console.log('Socket connected');
-        localStorage.removeItem('autoparts_user');
-    });
-
-    socket.on('connect_error', (err) => {
-        console.error('Socket Connection Error:', err);
+        // Try to restore session if localStorage has user data (simple persistence)
+        const savedUser = localStorage.getItem('autoparts_user');
+        if (savedUser) {
+           setCurrentUser(JSON.parse(savedUser));
+        }
     });
 
     socket.on('disconnect', () => setIsConnected(false));
@@ -56,6 +45,7 @@ export const useQueueSocket = () => {
 
     socket.on('user_update', (user: User) => {
         setCurrentUser(user);
+        localStorage.setItem('autoparts_user', JSON.stringify(user));
     });
 
     return () => {
@@ -65,15 +55,16 @@ export const useQueueSocket = () => {
 
   // --- ACTIONS ---
 
-  const login = (creds: LoginPayload): Promise<AuthResponse> => {
+  const login = (creds: any): Promise<AuthResponse> => {
     return new Promise((resolve) => {
         if (!socketRef.current?.connected) {
-             resolve({ success: false, message: 'Sem conexão com servidor. Verifique o Wi-Fi.' });
+             resolve({ success: false, message: 'Sem conexão com servidor.' });
              return;
         }
         socketRef.current.emit('login', creds, (response: AuthResponse) => {
             if (response.success && response.user) {
                 setCurrentUser(response.user);
+                localStorage.setItem('autoparts_user', JSON.stringify(response.user));
             }
             resolve(response);
         });
@@ -82,9 +73,7 @@ export const useQueueSocket = () => {
 
   const logout = () => {
       setCurrentUser(null);
-      if (socketRef.current) socketRef.current.disconnect();
-      const serverUrl = getSocketUrl();
-      socketRef.current = io(serverUrl);
+      localStorage.removeItem('autoparts_user');
   };
 
   const callNext = useCallback(() => {
@@ -107,20 +96,6 @@ export const useQueueSocket = () => {
     if (socketRef.current?.connected) socketRef.current.emit('revert');
   }, []);
 
-  const setTicketNumber = useCallback((number: number) => {
-    if (socketRef.current?.connected) socketRef.current.emit('setTicketNumber', number);
-  }, []);
-
-  const getAnalytics = useCallback((callback: (data: AnalyticsData) => void) => {
-    if (socketRef.current?.connected && currentUser) {
-      socketRef.current.emit('getAnalytics', currentUser.id, callback);
-    }
-  }, [currentUser]);
-
-  const setMusic = useCallback((music: Partial<MusicState>) => {
-    if (socketRef.current?.connected) socketRef.current.emit('setMusic', music);
-  }, []);
-
   return {
     isConnected,
     queueState,
@@ -132,10 +107,7 @@ export const useQueueSocket = () => {
       callNext,
       callSpecific,
       recallCurrent,
-      revertPrevious,
-      setTicketNumber,
-      getAnalytics,
-      setMusic
+      revertPrevious
     }
   };
 };

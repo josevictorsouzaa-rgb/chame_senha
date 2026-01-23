@@ -2,7 +2,7 @@ export interface User {
   id: string;
   username: string;
   name: string;
-  desk: string; // Now dynamic based on login selection
+  desk: string;
   totalCalls: number; // Lifetime
   stats: {
     today: number;
@@ -19,14 +19,6 @@ export interface Ticket {
   isRetroactive?: boolean; // If true, visual distinction on TV
 }
 
-export interface MusicState {
-  videoId: string | null;
-  title: string;
-  thumbnail: string;
-  isPlaying: boolean;
-  volume: number; // 0-100
-}
-
 export interface QueueState {
   currentTicket: number;
   lastCalledDesk: string | null;
@@ -35,7 +27,6 @@ export interface QueueState {
     totalCallsToday: number;
     averageServiceTime: number; // in seconds
   };
-  music: MusicState;
 }
 
 export interface AuthResponse {
@@ -44,41 +35,16 @@ export interface AuthResponse {
   message?: string;
 }
 
-export interface LoginPayload {
-  username: string;
-  password: string;
-  desk: string;
-}
-
-// New Analytics Interface
-export interface AnalyticsData {
-  store: {
-    totalCalls: number; // All time in DB
-    busiestDay: { date: string; count: number };
-    callsToday: number;
-  };
-  user: {
-    totalAnnual: number; // Current Year
-    totalMonth: number; // Current Month
-    bestDay: { date: string; count: number };
-    monthlyHistory: { month: string; count: number }[]; // For Chart
-  };
-}
-
 export interface ClientEvents {
-  'login': (creds: LoginPayload, callback: (res: AuthResponse) => void) => void;
+  'login': (creds: {username: string; password: string}, callback: (res: AuthResponse) => void) => void;
   'callNext': (userId: string) => void;
-  'callSpecific': (payload: { number: number; userId: string; isRetroactive: boolean }) => void;
+  'callSpecific': (payload: { number: number; userId: string; isRetroactive: boolean }) => void; // For retroactive or sync
   'recall': () => void;
   'revert': () => void;
-  'setTicketNumber': (number: number) => void; // New: Manual sync
-  'getAnalytics': (userId: string, callback: (data: AnalyticsData) => void) => void;
-  'setMusic': (music: Partial<MusicState>) => void;
 }
 
 export interface SocketEvents {
   'init': (state: QueueState) => void;
   'update': (state: QueueState & { recall?: boolean }) => void;
-  'user_update': (user: User) => void;
-  'error': (msg: string) => void;
+  'user_update': (user: User) => void; // Update specific connected user stats
 }

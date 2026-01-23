@@ -25,29 +25,18 @@ let db = {
     currentTicket: 0,
     lastCalledDesk: null,
   },
-  // Default music state
-  music: {
-    videoId: null,
-    title: '',
-    thumbnail: '',
-    isPlaying: false,
-    volume: 50
-  },
   users: [
-    { id: 'u1', username: 'vendedor1', password: '123', name: 'Carlos Silva', totalCalls: 0, history: [] },
-    { id: 'u2', username: 'vendedor2', password: '123', name: 'Ana Souza', totalCalls: 0, history: [] },
-    { id: 'u3', username: 'vendedor3', password: '123', name: 'Roberto Firmino', totalCalls: 0, history: [] },
-    { id: 'admin', username: 'admin', password: 'admin', name: 'Gerente Operacional', totalCalls: 0, history: [] }
+    { id: 'u1', username: 'vendedor1', password: '123', name: 'Carlos Silva', desk: '01', totalCalls: 0, history: [] },
+    { id: 'u2', username: 'vendedor2', password: '123', name: 'Ana Souza', desk: '02', totalCalls: 0, history: [] },
+    { id: 'admin', username: 'admin', password: 'admin', name: 'Gerente', desk: 'ADM', totalCalls: 0, history: [] }
   ],
-  history: [], 
+  history: [], // Global Ticket History
   dailyStats: {
     date: new Date().toLocaleDateString(),
     count: 0,
     totalDuration: 0, 
   }
 };
-
-const activeDesks = new Map(); 
 
 // --- HELPER FUNCTIONS ---
 
@@ -64,6 +53,7 @@ const resetDailyStatsIfNeeded = () => {
       count: 0,
       totalDuration: 0
     };
+    console.log('Daily stats reset for new day:', today);
     saveData();
   }
 };
@@ -78,8 +68,7 @@ const loadData = () => {
         ...db,
         ...loaded,
         config: { ...db.config, ...loaded.config },
-        // Ensure music object exists if loading from old file
-        music: { ...db.music, ...(loaded.music || {}) },
+        // Ensure users structure is correct (map over to ensure history array exists)
         users: (loaded.users || db.users).map(u => ({...u, history: u.history || []})),
         history: loaded.history || [],
         dailyStats: loaded.dailyStats || db.dailyStats
@@ -87,6 +76,7 @@ const loadData = () => {
       console.log('Database loaded.');
     } else {
       saveData();
+      console.log('Database created.');
     }
   } catch (err) {
     console.error('Error loading data:', err);
@@ -101,8 +91,12 @@ const saveData = () => {
   }
 };
 
+// Calculate Average Service Time (Global - Simplified logic based on intervals)
 const getAvgServiceTime = () => {
   if (db.dailyStats.count <= 1) return 0;
+  // Simple avg: (Total time open / Count) - crude approximation for queue speed
+  // A better metric for this specific request "time from one service to another"
+  // is calculated per user when they click call.
   return Math.round(db.dailyStats.totalDuration / db.dailyStats.count);
 };
 
@@ -113,11 +107,10 @@ const getPublicState = () => ({
   stats: {
     totalCallsToday: db.dailyStats.count,
     averageServiceTime: getAvgServiceTime()
-  },
-  music: db.music
+  }
 });
 
-const getUserStats = (userId, currentDesk) => {
+const getUserStats = (userId) => {
   const user = db.users.find(u => u.id === userId);
   if (!user) return null;
 
@@ -135,84 +128,12 @@ const getUserStats = (userId, currentDesk) => {
     id: user.id,
     username: user.username,
     name: user.name,
-    desk: currentDesk, 
+    desk: user.desk,
     totalCalls: user.totalCalls,
     stats: {
       today: callsToday,
       month: callsMonth,
       lastCallTime: user.lastCallTimestamp || null
-    }
-  };
-};
-
-// Analytics Logic (Simplified)
-const calculateAnalytics = (userId) => {
-  const user = db.users.find(u => u.id === userId);
-  const currentYear = new Date().getFullYear();
-  const currentMonthKey = getMonthKey();
-  const storeByDate = {};
-  let storeMaxDay = { date: '-', count: 0 };
-  
-  const allUserHistories = db.users.flatMap(u => u.history || []);
-
-  allUserHistories.forEach(h => {
-    const d = new Date(h.timestamp);
-    const dateKey = d.toLocaleDateString();
-    storeByDate[dateKey] = (storeByDate[dateKey] || 0) + 1;
-    if (storeByDate[dateKey] > storeMaxDay.count) {
-      storeMaxDay = { date: dateKey, count: storeByDate[dateKey] };
-    }
-  });
-
-  const userHistory = user?.history || [];
-  const userByDate = {};
-  const userByMonth = {}; 
-  let userBestDay = { date: '-', count: 0 };
-  let annualCount = 0;
-  let monthCount = 0;
-
-  userHistory.forEach(h => {
-    const d = new Date(h.timestamp);
-    const dateKey = d.toLocaleDateString();
-    const year = d.getFullYear();
-    const monthIndex = d.getMonth(); 
-    const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-
-    userByDate[dateKey] = (userByDate[dateKey] || 0) + 1;
-    if (userByDate[dateKey] > userBestDay.count) {
-      userBestDay = { date: dateKey, count: userByDate[dateKey] };
-    }
-
-    if (year === currentYear) {
-      annualCount++;
-      userByMonth[monthIndex] = (userByMonth[monthIndex] || 0) + 1;
-    }
-
-    if (monthKey === currentMonthKey) {
-      monthCount++;
-    }
-  });
-
-  const monthlyHistory = [];
-  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  for(let i=0; i<12; i++) {
-    monthlyHistory.push({
-      month: months[i],
-      count: userByMonth[i] || 0
-    });
-  }
-
-  return {
-    store: {
-      totalCalls: allUserHistories.length,
-      busiestDay: storeMaxDay,
-      callsToday: db.dailyStats.count
-    },
-    user: {
-      totalAnnual: annualCount,
-      totalMonth: monthCount,
-      bestDay: userBestDay,
-      monthlyHistory
     }
   };
 };
@@ -223,76 +144,48 @@ resetDailyStatsIfNeeded();
 io.on('connection', (socket) => {
   socket.emit('init', getPublicState());
 
-  socket.on('login', ({ username, password, desk }, callback) => {
+  socket.on('login', ({ username, password }, callback) => {
     const user = db.users.find(u => u.username === username && u.password === password);
-    
-    if (!user) {
-      return callback({ success: false, message: 'Credenciais inválidas.' });
+    if (user) {
+      const userData = getUserStats(user.id);
+      callback({ success: true, user: userData });
+    } else {
+      callback({ success: false, message: 'Credenciais inválidas.' });
     }
-
-    const usedDesks = Array.from(activeDesks.values());
-    if (usedDesks.includes(desk)) {
-      return callback({ success: false, message: `Balcão ${desk} já está em uso por outro operador.` });
-    }
-
-    activeDesks.set(socket.id, desk);
-    const userData = getUserStats(user.id, desk);
-    callback({ success: true, user: userData });
-  });
-
-  socket.on('disconnect', () => {
-    if (activeDesks.has(socket.id)) {
-      activeDesks.delete(socket.id);
-    }
-  });
-
-  // --- ACTIONS ---
-  
-  socket.on('setMusic', (musicData) => {
-    db.music = { ...db.music, ...musicData };
-    saveData();
-    io.emit('update', getPublicState());
-  });
-
-  socket.on('getAnalytics', (userId, callback) => {
-    const stats = calculateAnalytics(userId);
-    callback(stats);
-  });
-
-  socket.on('setTicketNumber', (number) => {
-    db.config.currentTicket = number;
-    saveData();
-    io.emit('update', getPublicState());
   });
 
   socket.on('callNext', (userId) => {
     resetDailyStatsIfNeeded();
     const user = db.users.find(u => u.id === userId);
-    const desk = activeDesks.get(socket.id);
-
-    if (!user || !desk) return;
+    if (!user) return;
 
     const now = Date.now();
     
+    // Calculate interval since LAST call by THIS user
     if (user.lastCallTimestamp) {
       const durationSeconds = (now - user.lastCallTimestamp) / 1000;
+      // Sanity check: ignore if > 45 mins (likely break)
       if (durationSeconds < 2700) {
         db.dailyStats.totalDuration += durationSeconds;
       }
     }
 
     db.config.currentTicket++;
-    db.config.lastCalledDesk = desk;
+    db.config.lastCalledDesk = user.desk;
+
     db.dailyStats.count++;
     user.totalCalls++;
     user.lastCallTimestamp = now;
     
+    // Store in user history
     if (!user.history) user.history = [];
-    user.history.unshift({ timestamp: new Date().toISOString(), number: db.config.currentTicket, desk: desk });
-    
+    user.history.unshift({ timestamp: new Date().toISOString(), number: db.config.currentTicket });
+    if(user.history.length > 50) user.history.pop(); // Keep last 50 per user
+
+    // Store in global history
     db.history.unshift({
       number: db.config.currentTicket,
-      desk: desk,
+      desk: user.desk,
       timestamp: new Date().toISOString(),
       caller: user.name
     });
@@ -300,33 +193,36 @@ io.on('connection', (socket) => {
 
     saveData();
     io.emit('update', getPublicState());
-    socket.emit('user_update', getUserStats(userId, desk));
+    socket.emit('user_update', getUserStats(userId));
   });
 
   socket.on('callSpecific', ({ number, userId, isRetroactive }) => {
     resetDailyStatsIfNeeded();
     const user = db.users.find(u => u.id === userId);
-    const desk = activeDesks.get(socket.id);
-    if (!user || !desk) return;
+    if (!user) return;
+    
+    let displayTicket = number;
     
     if (!isRetroactive) {
        db.config.currentTicket = number;
-       db.config.lastCalledDesk = desk;
+       db.config.lastCalledDesk = user.desk;
        user.lastCallTimestamp = Date.now(); 
     } else {
-       db.config.lastCalledDesk = desk;
+       db.config.lastCalledDesk = user.desk;
     }
 
     const ticketEntry = {
-      number: number,
-      desk: desk,
+      number: displayTicket,
+      desk: user.desk,
       timestamp: new Date().toISOString(),
       caller: user.name,
       isRetroactive: !!isRetroactive
     };
 
+    // Add to global
     db.history.unshift(ticketEntry);
     
+    // Add to user history if it's a "real" call (sync), maybe not retroactive
     if (!isRetroactive) {
        if (!user.history) user.history = [];
        user.history.unshift(ticketEntry);
@@ -334,7 +230,7 @@ io.on('connection', (socket) => {
 
     saveData();
     io.emit('update', getPublicState());
-    socket.emit('user_update', getUserStats(userId, desk));
+    socket.emit('user_update', getUserStats(userId));
   });
 
   socket.on('recall', () => {
