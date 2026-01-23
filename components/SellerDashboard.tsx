@@ -7,7 +7,7 @@ import {
   Menu, X, CheckCircle, AlertTriangle,
   BarChart3, Trophy, Calendar, LayoutDashboard,
   Music, Play, Pause, Square, Link as LinkIcon, Volume2,
-  SkipForward, SkipBack, ListMusic
+  SkipForward, SkipBack
 } from 'lucide-react';
 import { AnalyticsData } from '../types';
 
@@ -105,7 +105,7 @@ const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
       try {
          // If it's a playlist, we might not get thumbnail easily via noembed without a specific video ID
          // If we have videoId, fetch that. If only playlist, generic thumbnail.
-         let title = 'Playlist Carregada';
+         let title = 'Playlist YouTube';
          let thumbnail = 'https://img.youtube.com/vi/default/hqdefault.jpg';
 
          if (videoId) {
@@ -146,9 +146,8 @@ const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
 
          {hasActiveMedia ? (
             <div className="flex flex-col gap-4">
-               {/* Display Current Track Info */}
-               <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <img src={musicState.thumbnail} className="w-16 h-16 rounded-lg object-cover bg-slate-200 shadow-sm" />
+               <div className="flex items-center gap-4">
+                  <img src={musicState.thumbnail} className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
                   <div className="flex-1 min-w-0">
                      <p className="text-sm font-bold text-slate-900 truncate">{musicState.title}</p>
                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
@@ -157,51 +156,54 @@ const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
                               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Reproduzindo
                            </span>
                         ) : (
-                           <span className="text-slate-400 font-medium">Pausado</span>
+                           <span className="text-slate-400">Pausado</span>
                         )}
-                        {musicState.playlistId && <span className="ml-2 text-brand-600 font-bold px-2 py-0.5 bg-brand-50 rounded-full text-[10px]">PLAYLIST</span>}
                      </p>
                   </div>
-                  <button 
-                     onClick={() => onSetMusic({ videoId: null, playlistId: null, isPlaying: false })}
-                     className="p-2 bg-red-50 hover:bg-red-100 rounded-full text-red-600 transition-colors"
-                     title="Parar e Remover"
-                  >
-                     <Square className="w-5 h-5" />
-                  </button>
+                  <div className="flex gap-2">
+                     <button 
+                        onClick={() => onCommand('play')} // Just generic command for now, usually updates state
+                        className="hidden"
+                     ></button>
+                     <button 
+                        onClick={() => onSetMusic({ videoId: null, playlistId: null, isPlaying: false })}
+                        className="p-3 bg-red-50 hover:bg-red-100 rounded-full text-red-600 transition-colors"
+                        title="Parar Música"
+                     >
+                        <Square className="w-5 h-5" />
+                     </button>
+                  </div>
                </div>
 
-               {/* Remote Controls */}
-               <div className="grid grid-cols-3 gap-3">
-                    <button onClick={() => onCommand('prev')} className="flex items-center justify-center p-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold active:scale-95 transition-all">
+               {/* Controls */}
+               <div className="flex justify-center gap-4 py-2 border-t border-b border-slate-100">
+                    <button onClick={() => onCommand('prev')} className="p-2 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-lg">
                         <SkipBack className="w-6 h-6" />
                     </button>
-                    
                     <button 
                         onClick={() => {
                             if (musicState.isPlaying) onCommand('pause');
                             else onCommand('play');
                         }} 
-                        className={`flex items-center justify-center p-4 rounded-xl shadow-md active:scale-95 transition-all ${musicState.isPlaying ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                        className={`p-2 rounded-full ${musicState.isPlaying ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}
                     >
-                        {musicState.isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8" />}
+                        {musicState.isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
                     </button>
-
-                    <button onClick={() => onCommand('next')} className="flex items-center justify-center p-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold active:scale-95 transition-all">
+                    <button onClick={() => onCommand('next')} className="p-2 text-slate-500 hover:text-brand-600 hover:bg-slate-100 rounded-lg">
                         <SkipForward className="w-6 h-6" />
                     </button>
                </div>
                
                {/* Volume Control */}
-               <div className="bg-slate-50 p-3 rounded-lg flex items-center gap-3 border border-slate-100">
-                  <Volume2 className="w-4 h-4 text-slate-400" />
+               <div className="bg-slate-50 p-3 rounded-lg flex items-center gap-3">
+                  <Volume2 className="w-4 h-4 text-slate-500" />
                   <input 
                      type="range" 
                      min="0" 
                      max="100" 
                      value={musicState.volume || 50} 
                      onChange={handleVolumeChange}
-                     className="flex-1 accent-brand-600 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                     className="flex-1 accent-brand-600 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer"
                   />
                   <span className="text-xs font-mono font-bold text-slate-500 w-8 text-right">{musicState.volume || 50}%</span>
                </div>
@@ -212,7 +214,7 @@ const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
                   type="text" 
                   value={url}
                   onChange={e => setUrl(e.target.value)}
-                  placeholder="Cole o link do YouTube (Vídeo ou Playlist)..."
+                  placeholder="Cole link do vídeo ou playlist..."
                   className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-500 outline-none"
                />
                <button 

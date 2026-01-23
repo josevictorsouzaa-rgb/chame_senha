@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useQueueSocket } from '../hooks/useQueueSocket';
-import { Clock, Cloud, Sun, CloudRain, MapPin, Music, CloudLightning, CloudDrizzle, CalendarDays } from 'lucide-react';
+import { Clock, Cloud, Sun, CloudRain, MapPin, Music, CloudLightning, CloudDrizzle } from 'lucide-react';
 
-// --- REAL WEATHER WIDGET ---
+// --- REAL WEATHER WIDGET (PIRACICABA) ---
 const WeatherWidget: React.FC = () => {
   const [weather, setWeather] = useState<any>(null);
 
@@ -32,24 +32,54 @@ const WeatherWidget: React.FC = () => {
     return <CloudDrizzle className={`${className} text-blue-300`} />;
   };
 
+  const getWeatherLabel = (code: number) => {
+    if (code <= 1) return "Ensolarado";
+    if (code <= 3) return "Nublado";
+    if (code <= 67) return "Chuvoso";
+    if (code >= 95) return "Tempestade";
+    return "Instável";
+  };
+
   if (!weather) return <div className="text-slate-500 text-xs">...</div>;
 
   const currentTemp = Math.round(weather.current.temperature_2m);
   const currentCode = weather.current.weather_code;
+  
+  const daily = weather.daily;
+  const days = daily.time.slice(1, 4).map((t: string, i: number) => {
+    const date = new Date(t);
+    const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+    return {
+      name: dayName,
+      max: Math.round(daily.temperature_2m_max[i + 1]),
+      code: daily.weather_code[i + 1]
+    };
+  });
 
   return (
-    <div className="flex flex-col justify-center items-center h-full w-full">
-       <div className="flex items-center gap-4">
+    <div className="flex flex-col bg-slate-900/60 backdrop-blur-md rounded-xl p-3 border border-slate-700/50 shadow-lg h-full justify-between">
+       <div className="flex items-center gap-1.5 text-brand-300 mb-1">
+          <MapPin className="w-3 h-3" />
+          <span className="text-[10px] font-bold uppercase tracking-widest">Piracicaba, SP</span>
+       </div>
+       
+       <div className="flex items-center gap-3">
           <div className="animate-pulse-slow">
-            {getWeatherIcon(currentCode, "w-10 h-10")}
+            {getWeatherIcon(currentCode, "w-8 h-8")}
           </div>
           <div className="flex flex-col">
-             <span className="text-4xl font-bold text-white tracking-tighter leading-none">{currentTemp}°</span>
-             <div className="flex items-center gap-1 mt-1 text-slate-400">
-                <MapPin className="w-3 h-3" />
-                <span className="text-[10px] font-bold uppercase tracking-widest">Piracicaba</span>
-             </div>
+             <span className="text-3xl font-bold text-white tracking-tighter leading-none">{currentTemp}°</span>
+             <span className="text-[9px] text-slate-300 font-bold uppercase tracking-wide">{getWeatherLabel(currentCode)}</span>
           </div>
+       </div>
+       
+       <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-700/50 mt-1">
+          {days.map((d: any, i: number) => (
+             <div key={i} className="flex flex-col items-center justify-center p-1 rounded bg-slate-800/40">
+                <span className="text-[8px] font-bold text-slate-400 uppercase">{d.name}</span>
+                <span className="text-[10px] font-bold text-white">{d.max}°</span>
+             </div>
+          ))}
        </div>
     </div>
   );
@@ -63,23 +93,18 @@ const DigitalClock: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col justify-center items-center h-full w-full border-r border-slate-700/50">
-      <div className="text-center">
-          <div className="text-[5vh] font-sans font-bold text-white tracking-tight leading-none tabular-nums">
-            {time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-2 text-brand-400">
-            <CalendarDays className="w-4 h-4" />
-            <div className="text-[1.2vh] font-bold uppercase tracking-[0.15em]">
-                {time.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '')}
-            </div>
-          </div>
+    <div className="bg-slate-900/60 backdrop-blur-md rounded-xl p-3 border border-slate-700/50 shadow-lg text-center h-full flex flex-col justify-center">
+      <div className="text-[4vh] font-sans font-bold text-white tracking-tight leading-none tabular-nums">
+        {time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+      </div>
+      <div className="text-brand-400 text-[1vh] font-bold uppercase tracking-[0.2em] mt-1">
+        {time.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
       </div>
     </div>
   );
 };
 
-// --- YOUTUBE PLAYER ---
+// --- YOUTUBE PLAYER WITH PLAYLIST SUPPORT & REMOTE CONTROL ---
 declare global {
     interface Window {
         YT: any;
@@ -103,11 +128,9 @@ const MusicPlayer = ({
     command: { action: string, timestamp: number } | null
 }) => {
    const playerRef = useRef<any>(null);
-   const volumeRef = useRef(volume);
+   const currentVolRef = useRef(volume);
 
-   // Sync volume ref for callbacks
-   useEffect(() => { volumeRef.current = volume; }, [volume]);
-
+   // Load YouTube API
    useEffect(() => {
        if (!window.YT) {
            const tag = document.createElement('script');
@@ -115,92 +138,53 @@ const MusicPlayer = ({
            const firstScriptTag = document.getElementsByTagName('script')[0];
            firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
        }
+
+       window.onYouTubeIframeAPIReady = () => {
+           // Ready state logic handled in init effect
+       };
    }, []);
 
+   // Initialize or Update Player
    useEffect(() => {
        if (!window.YT || (!videoId && !playlistId)) return;
 
-       const createPlayer = () => {
-           // Helper to load content
-           const loadContent = (player: any) => {
-               if (playlistId) {
-                   player.loadPlaylist({
-                       listType: 'playlist',
-                       list: playlistId,
-                   });
-               } else if (videoId) {
-                   player.loadVideoById(videoId);
-               }
-           };
-
-           if (playerRef.current) {
-                loadContent(playerRef.current);
-                return;
-           }
-
+       if (!playerRef.current) {
            playerRef.current = new window.YT.Player('yt-player-frame', {
                height: '1',
                width: '1',
                playerVars: {
-                   'autoplay': 1,
+                   'playsinline': 1,
                    'controls': 0,
                    'disablekb': 1,
                    'fs': 0,
-                   'rel': 0,
-                   'mute': 1, // START MUTED TO ALLOW AUTOPLAY ON TV
-                   'loop': 1,
-                   'playsinline': 1,
-                   'origin': window.location.origin,
-                   'enablejsapi': 1
+                   'rel': 0, // Minimize related videos
+                   'modestbranding': 1,
+                   'listType': playlistId ? 'playlist' : undefined,
+                   'list': playlistId
                },
                events: {
                    'onReady': (event: any) => {
-                       // Ensure it starts muted and playing
-                       event.target.mute();
-                       if (isPlaying) {
-                           if (playlistId) {
-                               event.target.loadPlaylist({ listType: 'playlist', list: playlistId });
-                           } else {
-                               event.target.playVideo();
-                           }
-                       }
-                   },
-                   'onStateChange': (event: any) => {
-                        // YT.PlayerState.PLAYING = 1
-                        if (event.data === 1) {
-                            // Video started playing (muted). Now we unmute.
-                            // Small delay to ensure browser acknowledges playback
-                            setTimeout(() => {
-                                event.target.unMute();
-                                event.target.setVolume(volumeRef.current);
-                            }, 1000);
-                        }
-                        // YT.PlayerState.ENDED = 0
-                        if (event.data === 0 && playlistId) {
-                            event.target.nextVideo();
-                        }
-                   },
-                   'onError': (event: any) => {
-                       console.log("YT Error", event.data);
-                       // 150/101 = restricted. Skip.
-                       if (playlistId) event.target.nextVideo();
+                       if (isPlaying) event.target.playVideo();
+                       event.target.setVolume(volume);
                    }
                }
            });
-       };
-
-       if (window.YT && window.YT.Player) {
-           createPlayer();
        } else {
-           window.onYouTubeIframeAPIReady = createPlayer;
+           // If IDs change
+           const player = playerRef.current;
+           if (playlistId) {
+               player.loadPlaylist({ list: playlistId, listType: 'playlist' });
+           } else if (videoId) {
+               player.loadVideoById(videoId);
+           }
        }
-
-   }, [videoId, playlistId]);
+   }, [videoId, playlistId]); // Only re-init if content source changes
 
    // Handle Remote Commands
    useEffect(() => {
        if (!playerRef.current || !command) return;
        const player = playerRef.current;
+       
        if (typeof player.playVideo !== 'function') return;
 
        switch(command.action) {
@@ -214,43 +198,50 @@ const MusicPlayer = ({
    // Handle Volume Ducking
    useEffect(() => {
       if (!playerRef.current || typeof playerRef.current.setVolume !== 'function') return;
-      const targetVolume = ducking ? 10 : volume; 
-      playerRef.current.setVolume(targetVolume);
+      
+      const targetVolume = ducking ? 5 : volume;
+      const player = playerRef.current;
+      
+      const fadeInterval = setInterval(() => {
+         const diff = targetVolume - currentVolRef.current;
+         if (Math.abs(diff) < 2) {
+            currentVolRef.current = targetVolume;
+         } else {
+            currentVolRef.current += diff * 0.15; 
+         }
+         player.setVolume(Math.round(currentVolRef.current));
+      }, 50);
+
+      return () => clearInterval(fadeInterval);
    }, [ducking, volume]);
 
    return <div id="yt-player-frame" className="absolute opacity-0 pointer-events-none"></div>;
 };
 
-// Moved inside Sidebar to avoid overlap
-const NowPlayingWidget = ({ music }: { music: any }) => {
-   if ((!music.videoId && !music.playlistId) || !music.isPlaying) return (
-       <div className="h-full bg-slate-800 rounded-2xl border border-slate-700 p-4 flex items-center justify-center gap-2 text-slate-500">
-           <Music className="w-5 h-5" />
-           <span className="text-xs font-bold uppercase tracking-wider">Aguardando Música...</span>
-       </div>
-   );
+const NowPlaying = ({ music }: { music: any }) => {
+   if ((!music.videoId && !music.playlistId) || !music.isPlaying) return null;
 
    return (
-      <div className="h-full bg-slate-800 rounded-2xl border border-blue-900/50 p-4 flex items-center gap-4 relative overflow-hidden shadow-lg">
-         {/* Animated Background Bar */}
-         <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-400 animate-pulse w-full"></div>
-         
+      <div className="absolute bottom-6 left-6 z-30 flex items-center gap-3 bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 p-3 rounded-xl pr-6 max-w-[30vw] animate-in slide-in-from-bottom-10 fade-in duration-700">
          <div className="relative shrink-0">
-            <img src={music.thumbnail} className="w-12 h-12 rounded-lg object-cover bg-slate-900 shadow-md" />
+            <img src={music.thumbnail} className="w-10 h-10 rounded-lg object-cover shadow-lg" />
+            <div className="absolute -bottom-1 -right-1 bg-brand-600 rounded-full p-1 shadow-lg">
+               <Music className="w-2 h-2 text-white animate-spin-slow" />
+            </div>
          </div>
-         <div className="flex-1 min-w-0 z-10">
-             <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Tocando Agora</span>
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]"></span>
+         <div className="flex-1 min-w-0">
+             <div className="flex items-center gap-2 mb-0.5">
+                <span className="w-1 h-1 rounded-full bg-green-500 animate-pulse"></span>
+                <span className="text-[9px] font-bold text-green-400 uppercase tracking-widest">Som Ambiente</span>
              </div>
-             <p className="text-white font-bold leading-tight line-clamp-1 text-sm">{music.title}</p>
+             <p className="text-white font-bold leading-tight line-clamp-1 text-xs">{music.title}</p>
          </div>
       </div>
    );
 };
 
 export const TVDisplay: React.FC = () => {
-  const { queueState, lastUpdateTimestamp, playerCommand } = useQueueSocket();
+  const { isConnected, queueState, lastUpdateTimestamp, playerCommand } = useQueueSocket();
   const [highlight, setHighlight] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -272,21 +263,7 @@ export const TVDisplay: React.FC = () => {
         const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioCtor) audioCtxRef.current = new AudioCtor();
       }
-      
-      const ctx = audioCtxRef.current;
-      if (ctx) {
-        if (ctx.state === 'suspended') {
-            ctx.resume();
-        }
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        gain.gain.value = 0;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(0);
-        osc.stop(0.1);
-      }
-      
+      if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
       setHasStarted(true);
     } catch (e) { setHasStarted(true); }
   };
@@ -294,39 +271,37 @@ export const TVDisplay: React.FC = () => {
   const playDingDong = () => {
     try {
       const ctx = audioCtxRef.current;
-      if (!ctx || ctx.state !== 'running') {
-         if(ctx) ctx.resume();
-         return; 
-      }
-      
+      if (!ctx) return;
       const now = ctx.currentTime;
       const masterGain = ctx.createGain();
       masterGain.connect(ctx.destination);
-      masterGain.gain.value = 1.0; 
+      masterGain.gain.value = 0.8;
 
+      // Ding
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
-      osc1.type = 'sine';
+      osc1.type = 'triangle';
       osc1.frequency.setValueAtTime(660, now);
       gain1.gain.setValueAtTime(0, now);
       gain1.gain.linearRampToValueAtTime(1, now + 0.02);
-      gain1.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
       osc1.connect(gain1);
       gain1.connect(masterGain);
       osc1.start(now);
       osc1.stop(now + 1.2);
 
+      // Dong
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(550, now + 0.5);
-      gain2.gain.setValueAtTime(0, now + 0.5);
-      gain2.gain.linearRampToValueAtTime(1, now + 0.55);
-      gain2.gain.exponentialRampToValueAtTime(0.01, now + 2.0);
+      osc2.frequency.setValueAtTime(550, now + 0.6);
+      gain2.gain.setValueAtTime(0, now + 0.6);
+      gain2.gain.linearRampToValueAtTime(1, now + 0.65);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
       osc2.connect(gain2);
       gain2.connect(masterGain);
-      osc2.start(now + 0.5);
-      osc2.stop(now + 2.0);
+      osc2.start(now + 0.6);
+      osc2.stop(now + 2.5);
 
     } catch (e) { console.error(e); }
   };
@@ -334,14 +309,11 @@ export const TVDisplay: React.FC = () => {
   const speak = (ticket: number, desk: string) => {
      if ('speechSynthesis' in window) {
          window.speechSynthesis.cancel();
-         setTimeout(() => {
-            const text = `Senha, ${ticket}. Balcão, ${desk}`;
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = 'pt-BR';
-            msg.rate = 1.0;
-            msg.volume = 1.0;
-            window.speechSynthesis.speak(msg);
-         }, 1200);
+         const text = `Senha ${ticket}, Balcão ${desk}`;
+         const msg = new SpeechSynthesisUtterance(text);
+         msg.lang = 'pt-BR';
+         msg.rate = 1.0; 
+         setTimeout(() => window.speechSynthesis.speak(msg), 1400); 
       }
   };
 
@@ -349,29 +321,37 @@ export const TVDisplay: React.FC = () => {
     if (!hasStarted) return;
     
     const isNewTicket = queueState.currentTicket !== lastPlayedTicketRef.current;
-    const isRecall = (queueState as any).recall === true;
     
-    if ((queueState.currentTicket > 0) && (isNewTicket || isRecall)) {
+    const shouldPlay = (queueState.currentTicket > 0) && (
+       isNewTicket || 
+       (queueState.currentTicket === lastPlayedTicketRef.current && (queueState as any).recall === true) 
+    );
+
+    if (shouldPlay || ((queueState as any).recall)) {
+      setHighlight(true);
+      playDingDong();
+      speak(queueState.currentTicket, queueState.lastCalledDesk || '??');
+      
       lastPlayedTicketRef.current = queueState.currentTicket;
-      setTimeout(() => {
-          setHighlight(true);
-          playDingDong();
-          speak(queueState.currentTicket, queueState.lastCalledDesk || '??');
-      }, 300);
-      const timer = setTimeout(() => setHighlight(false), 5000); 
+
+      const timer = setTimeout(() => setHighlight(false), 8000); // 8 seconds highlight
       return () => clearTimeout(timer);
     }
   }, [lastUpdateTimestamp, hasStarted, queueState.currentTicket, (queueState as any).recall]);
 
   if (!hasStarted) {
     return (
-      <div onClick={initAudioSystem} className="h-screen w-screen bg-slate-950 flex items-center justify-center cursor-pointer overflow-hidden relative">
-        <div className="z-10 text-center">
-           <div className="w-24 h-24 bg-[#2563eb] rounded-full mx-auto flex items-center justify-center shadow-lg border-4 border-slate-800 animate-pulse mb-6">
-              <Music className="w-10 h-10 text-white" />
+      <div onClick={initAudioSystem} className="h-screen w-screen bg-slate-950 flex items-center justify-center cursor-pointer">
+        <div className="text-center space-y-8 animate-pulse">
+           <div className="w-32 h-32 bg-brand-600 rounded-[2rem] mx-auto flex items-center justify-center shadow-[0_0_60px_rgba(37,99,235,0.4)]">
+              <Clock className="w-16 h-16 text-white" />
            </div>
-           <h1 className="text-3xl font-bold text-white mb-2">AutoParts TV</h1>
-           <p className="text-slate-400 text-sm uppercase tracking-widest">Toque para iniciar Áudio e Vídeo</p>
+           <div>
+             <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">Queue Master TV</h1>
+             <p className="text-brand-400 font-bold tracking-[0.2em] uppercase text-sm border border-brand-800 bg-brand-900/20 py-2 px-6 rounded-full inline-block">
+                Toque para Iniciar
+             </p>
+           </div>
         </div>
       </div>
     );
@@ -389,76 +369,92 @@ export const TVDisplay: React.FC = () => {
          command={playerCommand}
       />
 
-      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-8 p-10">
+      <NowPlaying music={queueState.music} />
+
+      {/* Background Ambience */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black z-0"></div>
+      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 z-0 pointer-events-none"></div>
+
+      {/* RIGID GRID LAYOUT - NO OVERLAPPING */}
+      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-0">
          
-         {/* LEFT: MAIN DISPLAY (8 cols) */}
-         <div className="col-span-8 flex flex-col items-center justify-center relative bg-slate-900/20 rounded-[3rem] border border-slate-800/50">
-             
-             <div className="flex flex-col items-center w-full">
-                 <h2 className="text-slate-500 font-bold text-[3vh] uppercase tracking-[0.4em] mb-[4vh]">Senha Atual</h2>
+         {/* LEFT COLUMN: MAIN DISPLAY (Col Span 8 = 66%) */}
+         <div className="col-span-8 flex flex-col items-center justify-center relative p-8">
+             {/* Glow Effect behind number */}
+             <div className={`
+                 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[60vh] h-[60vh]
+                 rounded-full blur-[100px] transition-all duration-300 ease-out
+                 ${highlight ? 'bg-yellow-500/30 opacity-100 scale-125' : 'bg-brand-600/10 opacity-20 scale-75'}
+             `}></div>
+
+             <div className="relative z-10 flex flex-col items-center w-full">
+                 <h2 className="text-brand-200/60 font-bold text-[3vh] uppercase tracking-[0.5em] mb-[2vh]">Senha Atual</h2>
                  
+                 {/* BIG NUMBER - Turns Yellow on Highlight */}
                  <div className={`
-                     text-[45vh] leading-none font-bold tracking-tighter transition-all duration-300
+                     text-[40vh] leading-none font-bold tracking-tighter transition-all duration-300 ease-out
                      ${highlight 
-                        ? 'text-[#2563eb] animate-pop-blue scale-110' 
+                        ? 'text-yellow-400 scale-110 drop-shadow-[0_0_80px_rgba(250,204,21,0.6)] animate-shake' 
                         : 'text-white scale-100'}
                  `}>
                     {String(queueState.currentTicket).padStart(3, '0')}
                  </div>
 
+                 {/* DESK CARD - Turns Yellowish on Highlight */}
                  <div className={`
-                     mt-[6vh] bg-slate-800 rounded-3xl w-[85%] py-[4vh] border
-                     flex flex-col items-center gap-1 transition-colors duration-500 shadow-2xl
-                     ${highlight ? 'border-[#2563eb] bg-blue-900/30' : 'border-slate-700'}
+                     mt-[4vh] backdrop-blur-xl border rounded-3xl w-[80%] py-[3vh]
+                     flex flex-col items-center gap-1 shadow-2xl transition-all duration-500
+                     ${highlight 
+                        ? 'border-yellow-500/50 bg-yellow-900/40 translate-y-2 shadow-yellow-500/20' 
+                        : 'border-slate-700/50 bg-slate-900/60 shadow-black/50'}
                  `}>
-                     <span className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[1.8vh]">Dirija-se ao</span>
-                     <span className={`text-[9vh] font-bold leading-none ${highlight ? 'text-blue-400' : 'text-white'}`}>
+                     <span className="text-slate-400 font-bold uppercase tracking-widest text-[1.5vh]">Dirija-se ao</span>
+                     <span className={`text-[9vh] font-bold leading-none ${highlight ? 'text-yellow-100' : 'text-white'}`}>
                         {queueState.lastCalledDesk ? `Balcão ${String(queueState.lastCalledDesk).padStart(2, '0')}` : '---'}
                      </span>
                  </div>
              </div>
          </div>
 
-         {/* RIGHT: SIDEBAR (4 cols) - HUGE GAP */}
-         <div className="col-span-4 flex flex-col h-full gap-10">
+         {/* RIGHT COLUMN: SIDEBAR (Col Span 4 = 33%) */}
+         <div className="col-span-4 p-[3vh] h-full flex flex-col gap-[2vh] bg-slate-900/20 border-l border-white/5">
              
-             {/* BLOCK 1: CLOCK & WEATHER */}
-             <div className="h-[20%] bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex overflow-hidden">
-                <div className="flex-1"><DigitalClock /></div>
-                <div className="flex-1"><WeatherWidget /></div>
+             {/* TOP WIDGETS (Fixed Height Section: 20%) */}
+             <div className="h-[20%] flex gap-[2vh]">
+                <div className="flex-1 min-w-0">
+                   <DigitalClock />
+                </div>
+                <div className="flex-1 min-w-0">
+                   <WeatherWidget />
+                </div>
              </div>
 
-             {/* BLOCK 2: HISTORY - STRONGER FADE */}
-             <div className="flex-1 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl flex flex-col overflow-hidden p-6">
-                 <div className="flex items-center gap-2 mb-6 text-slate-500 font-bold uppercase tracking-widest text-xs border-b border-slate-700 pb-4">
-                    <Clock className="w-3 h-3 text-[#2563eb]" />
+             {/* HISTORY LIST (Remaining Height: 80%) */}
+             <div className="h-[80%] bg-slate-900/40 backdrop-blur-md rounded-2xl border border-slate-800/50 p-[3vh] flex flex-col shadow-xl overflow-hidden relative">
+                 <div className="flex items-center gap-3 mb-[2vh] text-slate-500 font-bold uppercase tracking-widest text-[1.5vh] shrink-0">
+                    <Clock className="w-4 h-4" />
                     Últimas Chamadas
                  </div>
 
-                 <div className="flex-1 flex flex-col gap-4">
+                 {/* Scrollable container if needed, but fixed items usually fit */}
+                 <div className="flex-1 flex flex-col gap-[1.5vh]">
                     {queueState.history.slice(0, 5).map((t, i) => {
-                       // AGGRESSIVE FADE LOGIC
-                       // 0 -> 1.0 (Active)
-                       // 1 -> 0.60
-                       // 2 -> 0.40
-                       // 3 -> 0.20
-                       // 4 -> 0.10
-                       const opacity = i === 0 ? 1 : Math.max(0.1, 0.8 - (i * 0.2)); 
+                       const opacity = i === 0 ? 1 : i === 1 ? 0.7 : i === 2 ? 0.45 : i === 3 ? 0.25 : 0.15;
                        
                        return (
                           <div key={i} style={{ opacity }} className={`
-                             flex items-center justify-between p-4 rounded-xl border transition-all duration-500 relative overflow-hidden
+                             flex items-center justify-between p-[1.8vh] rounded-xl border transition-all duration-500
                              ${i === 0 && highlight 
-                                ? 'bg-[#2563eb]/20 border-[#2563eb] scale-105 shadow-lg z-10' 
-                                : 'bg-slate-900/50 border-slate-700/50'}
+                                ? 'bg-yellow-500/10 border-yellow-500/50 scale-105 shadow-lg translate-x-1' 
+                                : 'bg-slate-800/30 border-slate-700/30'}
                           `}>
-                             {i === 0 && highlight && <div className="absolute left-0 top-0 w-1 h-full bg-[#2563eb]"></div>}
-                             <span className={`text-4xl font-bold tracking-tight ${i === 0 && highlight ? 'text-[#2563eb]' : 'text-slate-300'}`}>
+                             <span className={`text-[5vh] font-bold tracking-tight leading-none ${i === 0 && highlight ? 'text-yellow-400' : (i===0 ? 'text-white' : 'text-slate-400')}`}>
                                 {String(t.number).padStart(3, '0')}
                              </span>
-                             <div className="text-right">
-                                <span className={`text-lg font-bold ${i === 0 && highlight ? 'text-blue-200' : 'text-slate-500'}`}>
-                                   Balcão {String(t.desk).padStart(2, '0')}
+                             <div className="text-right leading-tight">
+                                <span className="block text-[1.1vh] uppercase font-bold text-slate-500">Balcão</span>
+                                <span className={`text-[2.5vh] font-bold ${i === 0 && highlight ? 'text-yellow-200' : (i===0 ? 'text-brand-300' : 'text-slate-500')}`}>
+                                   {String(t.desk).padStart(2, '0')}
                                 </span>
                              </div>
                           </div>
@@ -466,12 +462,6 @@ export const TVDisplay: React.FC = () => {
                     })}
                  </div>
              </div>
-
-             {/* BLOCK 3: MUSIC */}
-             <div className="h-[15%] min-h-[100px]">
-                 <NowPlayingWidget music={queueState.music} />
-             </div>
-
          </div>
 
       </div>
