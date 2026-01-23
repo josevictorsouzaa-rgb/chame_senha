@@ -39,10 +39,17 @@ body {
 }
 
 /* TV Optimization: Marquee */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
 .animate-marquee {
   display: inline-block;
-  white-space: nowrap;
+  padding-left: 100%; /* Start from outside */
+  animation: marquee 40s linear infinite;
   will-change: transform; /* Force GPU acceleration on TV */
+  white-space: nowrap;
 }
 
 /* TV Optimization: Reduce complex shadow rendering cost */

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useQueueSocket } from '../hooks/useQueueSocket';
-import { Clock, Cloud, Sun, CloudRain, MapPin, Music, CloudLightning, CloudDrizzle, CalendarDays, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { Clock, Cloud, Sun, CloudRain, MapPin, Music, CloudLightning, CloudDrizzle, CalendarDays, Wifi, WifiOff } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -12,9 +12,9 @@ declare global {
 // --- SUB-COMPONENTS ---
 
 const NewsTicker = () => (
-  <div className="fixed bottom-0 left-0 w-full bg-lubel-primary text-white h-12 flex items-center overflow-hidden border-t-4 border-yellow-500 z-50 shadow-2xl">
-    <div className="animate-marquee whitespace-nowrap font-bold uppercase tracking-[0.15em] text-[2vh] text-yellow-50 drop-shadow-md">
-      Bem-vindo à Lubel Auto Peças • Confira nossas ofertas de óleos e filtros • Atendimento de segunda a sexta das 08:00 às 18:00 • Peças originais com garantia • Qualidade e Confiança
+  <div className="fixed bottom-0 left-0 w-full bg-lubel-primary text-white h-16 flex items-center overflow-hidden border-t-4 border-yellow-500 z-50 shadow-2xl">
+    <div className="animate-marquee font-bold uppercase tracking-[0.15em] text-[2.5vh] text-yellow-50 drop-shadow-md leading-none">
+      BEM-VINDO À LUBEL AUTO PEÇAS • CONFIRA NOSSAS OFERTAS DE ÓLEOS E FILTROS • ATENDIMENTO DE SEGUNDA A SEXTA DAS 08:00 ÀS 18:00 • PEÇAS ORIGINAIS COM GARANTIA • QUALIDADE E CONFIANÇA
     </div>
   </div>
 );
@@ -58,18 +58,18 @@ const WeatherWidget: React.FC = () => {
     return <CloudDrizzle className={`${className} text-blue-300`} />;
   };
 
-  if (!weather) return <div className="text-slate-600 font-bold text-xs uppercase animate-pulse">Carregando Clima...</div>;
+  if (!weather) return <div className="text-slate-600 font-bold text-xs uppercase animate-pulse">Carregando...</div>;
 
   const currentTemp = Math.round(weather.current.temperature_2m);
   const currentCode = weather.current.weather_code;
 
   return (
-    <div className="flex items-center gap-4 bg-black/20 px-4 py-2 rounded-xl border border-white/5">
+    <div className="flex items-center gap-4 bg-black/20 px-4 py-2 rounded-xl border border-white/5 h-full justify-center">
         <div className="animate-pulse-slow drop-shadow-lg">
-           {getWeatherIcon(currentCode, "w-10 h-10")}
+           {getWeatherIcon(currentCode, "w-12 h-12")}
         </div>
         <div className="flex flex-col">
-            <span className="text-3xl font-bold text-white tracking-tighter leading-none drop-shadow-md">{currentTemp}°</span>
+            <span className="text-4xl font-bold text-white tracking-tighter leading-none drop-shadow-md">{currentTemp}°</span>
             <div className="flex items-center gap-1 mt-1 text-slate-400">
                <MapPin className="w-3 h-3" />
                <span className="text-[10px] font-bold uppercase tracking-widest">Piracicaba</span>
@@ -87,11 +87,11 @@ const DigitalClock: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col items-end">
-          <div className="text-[5vh] font-mono font-bold text-white tracking-tight leading-none tabular-nums drop-shadow-lg">
+    <div className="flex flex-col items-center justify-center h-full">
+          <div className="text-[6vh] font-mono font-bold text-white tracking-tight leading-none tabular-nums drop-shadow-lg">
             {time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
           </div>
-          <div className="flex items-center justify-end gap-2 mt-1 text-yellow-500">
+          <div className="flex items-center justify-center gap-2 mt-1 text-yellow-500">
             <CalendarDays className="w-4 h-4" />
             <div className="text-[1.5vh] font-bold uppercase tracking-[0.1em]">
                 {time.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -135,18 +135,23 @@ const MusicPlayer = ({
            playerRef.current = new window.YT.Player('yt-player-frame', {
                height: '1', width: '1',
                playerVars: {
-                   'autoplay': 1, 'controls': 0, 'disablekb': 1,
-                   'fs': 0, 'rel': 0, 'mute': 1, 'loop': 1,
-                   'playsinline': 1, 'origin': window.location.origin, 'enablejsapi': 1
+                   'autoplay': 1, 
+                   'controls': 0, 
+                   'disablekb': 1,
+                   'fs': 0, 
+                   'rel': 0, 
+                   'mute': 1, 
+                   'loop': 1,
+                   'playsinline': 1, 
+                   'origin': window.location.origin, 
+                   'widget_referrer': window.location.origin,
+                   'host': 'http://www.youtube.com', // Hint for HTTP envs
+                   'enablejsapi': 1
                },
                events: {
                    'onReady': (event: any) => {
                        onPlayerReady(event.target);
-                       event.target.mute(); // Start muted to satisfy autoplay policy
-                       if (isPlaying) {
-                           if (playlistId) event.target.loadPlaylist({ listType: 'playlist', list: playlistId });
-                           else event.target.playVideo();
-                       }
+                       // Wait for user interaction to unmute
                    },
                    'onStateChange': (event: any) => {
                         if (event.data === 0 && playlistId) event.target.nextVideo();
@@ -216,66 +221,56 @@ const NowPlayingWidget = ({ music }: { music: any }) => {
 export const TVDisplay: React.FC = () => {
   const { isConnected, queueState, lastUpdateTimestamp, playerCommand } = useQueueSocket();
   const [highlight, setHighlight] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false); // Restore start state
   const audioCtxRef = useRef<AudioContext | null>(null);
   const playerApiRef = useRef<any>(null); 
   const lastPlayedTicketRef = useRef(0);
+  
+  // Use ref to access current queue state inside event listeners without stale closures
+  const queueRef = useRef(queueState);
+  useEffect(() => { queueRef.current = queueState; }, [queueState]);
 
-  // --- INITIALIZATION ---
   useEffect(() => {
-    // 1. Force dark gradient background immediately
     document.body.style.background = 'radial-gradient(ellipse at center, #1e293b 0%, #020617 100%)'; 
     document.body.style.overflow = 'hidden'; 
+    return () => { document.body.style.background = ''; };
+  }, []);
 
-    // 2. Initialize Audio System Logic (Auto-Start Attempt)
-    const initAudio = () => {
-        try {
-            const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioCtor && !audioCtxRef.current) {
-                audioCtxRef.current = new AudioCtor();
-                // Create dummy osc to unlock audio engine if allowed
-                const ctx = audioCtxRef.current;
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                gain.gain.value = 0;
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start(0); 
-                osc.stop(0.1);
-            }
+  // MANUAL START FUNCTION - Crucial for TV/HTTP
+  const initAudioSystem = () => {
+      try {
+          // 1. Init AudioContext (Ding Dong)
+          if (!audioCtxRef.current) {
+              const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
+              if (AudioCtor) audioCtxRef.current = new AudioCtor();
+          }
+          const ctx = audioCtxRef.current;
+          if (ctx && ctx.state === 'suspended') ctx.resume();
 
-            // Aggressive Unmute Logic
-            if (playerApiRef.current && typeof playerApiRef.current.unMute === 'function') {
-                console.log("Auto-unmuting player...");
-                playerApiRef.current.unMute();
-                playerApiRef.current.setVolume(queueState.music.volume || 50);
-                if (queueState.music.isPlaying) playerApiRef.current.playVideo();
-            }
-        } catch (e) { console.error("Audio Init Error", e); }
-    };
+          // 2. Unlock YouTube Player
+          const player = playerApiRef.current;
+          const currentMusic = queueRef.current.music;
 
-    // Attempt to init immediately on mount
-    initAudio();
+          if (player && typeof player.unMute === 'function') {
+              console.log("Unlocking TV Audio...");
+              player.unMute();
+              player.setVolume(currentMusic.volume || 50);
 
-    // Also add a global listener to ensure unmute happens on ANY interaction (remote click, keypress)
-    const unlockAudio = () => {
-        if (audioCtxRef.current?.state === 'suspended') {
-            audioCtxRef.current.resume();
-        }
-        initAudio();
-        // Don't remove listener immediately, keep it for retry
-    };
-
-    window.addEventListener('click', unlockAudio);
-    window.addEventListener('keydown', unlockAudio);
-    window.addEventListener('touchstart', unlockAudio);
-
-    return () => { 
-        document.body.style.background = ''; 
-        window.removeEventListener('click', unlockAudio);
-        window.removeEventListener('keydown', unlockAudio);
-        window.removeEventListener('touchstart', unlockAudio);
-    };
-  }, []); // Run once on mount
+              // Force play if something is queued
+              if (currentMusic.isPlaying) {
+                  if (currentMusic.playlistId) {
+                      player.loadPlaylist({ listType: 'playlist', list: currentMusic.playlistId });
+                  } else if (currentMusic.videoId) {
+                      player.playVideo();
+                  }
+              }
+          }
+          setHasStarted(true);
+      } catch (e) {
+          console.error("Audio Start Error", e);
+          setHasStarted(true);
+      }
+  };
 
   const playDingDong = () => {
     try {
@@ -334,7 +329,7 @@ export const TVDisplay: React.FC = () => {
     const isNewTicket = queueState.currentTicket !== lastPlayedTicketRef.current;
     const isRecall = (queueState as any).recall === true;
     
-    if ((queueState.currentTicket > 0) && (isNewTicket || isRecall)) {
+    if (hasStarted && (queueState.currentTicket > 0) && (isNewTicket || isRecall)) {
       lastPlayedTicketRef.current = queueState.currentTicket;
       setTimeout(() => {
           setHighlight(true);
@@ -344,10 +339,10 @@ export const TVDisplay: React.FC = () => {
       const timer = setTimeout(() => setHighlight(false), 5000); 
       return () => clearTimeout(timer);
     }
-  }, [lastUpdateTimestamp, queueState.currentTicket, (queueState as any).recall]);
+  }, [lastUpdateTimestamp, queueState.currentTicket, (queueState as any).recall, hasStarted]);
 
   return (
-    <div className="h-screen w-screen text-slate-100 flex overflow-hidden font-sans relative select-none pb-12">
+    <div className="h-screen w-screen bg-slate-950 text-white flex overflow-hidden font-sans relative select-none">
       
       <MusicPlayer 
          videoId={queueState.music?.videoId} 
@@ -359,34 +354,44 @@ export const TVDisplay: React.FC = () => {
          onPlayerReady={(player) => { playerApiRef.current = player; }}
       />
 
+      {/* START OVERLAY - MANDATORY FOR TV COMPATIBILITY */}
+      {!hasStarted && (
+        <div 
+          onClick={initAudioSystem} 
+          className="absolute inset-0 z-50 bg-slate-950/95 flex items-center justify-center cursor-pointer overflow-hidden animate-in fade-in duration-500 backdrop-blur-sm"
+        >
+            <div className="z-10 text-center">
+                <div className="w-24 h-24 bg-lubel-primary rounded-full mx-auto flex items-center justify-center shadow-lg border-4 border-yellow-500 animate-pulse mb-6">
+                    <Music className="w-10 h-10 text-white" />
+                </div>
+                <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">AutoParts TV</h1>
+                <p className="text-yellow-400 text-sm font-bold uppercase tracking-widest bg-yellow-400/10 px-4 py-2 rounded-full border border-yellow-400/20">Toque para iniciar Áudio e Vídeo</p>
+            </div>
+        </div>
+      )}
+
       <ConnectionStatus isConnected={isConnected} />
 
-      {/* MAIN GRID - SAFE AREA PADDING INCREASED */}
-      <div className="absolute inset-0 z-10 grid grid-cols-12 gap-10 p-16 pb-20">
+      {/* MAIN CONTENT - FIXED PADDING FOR BOTTOM TICKER */}
+      <div className={`absolute inset-0 z-10 grid grid-cols-12 gap-6 p-8 pb-24 transition-opacity duration-1000 ${hasStarted ? 'opacity-100' : 'opacity-0'}`}>
          
-         {/* LEFT: MAIN DISPLAY (7 cols) */}
-         <div className="col-span-7 flex flex-col justify-center relative">
+         {/* LEFT: MAIN TICKET DISPLAY */}
+         <div className="col-span-7 flex flex-col items-center justify-center relative bg-slate-900/20 rounded-[3rem] border border-slate-800/50">
              
-             {/* Dynamic Highlight Container */}
-             <div className={`
-                flex flex-col items-center justify-center w-full aspect-[4/3] rounded-[3rem] border-2 transition-all duration-500
-                ${highlight 
-                    ? 'bg-blue-900/40 border-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.2)]' 
-                    : 'bg-slate-900/30 border-white/5'}
-             `}>
-                 <h2 className="text-slate-400 font-bold text-[3vh] uppercase tracking-[0.4em] mb-4">Senha Atual</h2>
+             <div className="flex flex-col items-center w-full scale-95">
+                 <h2 className="text-slate-500 font-bold text-[3vh] uppercase tracking-[0.4em] mb-[2vh]">Senha Atual</h2>
                  
                  <div className={`
                      text-[40vh] leading-none font-bold tracking-tighter tabular-nums drop-shadow-2xl transition-all duration-300
                      ${highlight 
-                        ? 'text-white scale-110' 
+                        ? 'text-white scale-110 animate-pop-blue' 
                         : 'text-[#f1f5f9] scale-100'}
                  `}>
                     {String(queueState.currentTicket).padStart(3, '0')}
                  </div>
 
                  <div className={`
-                     mt-8 rounded-2xl w-[80%] py-6 border-2 flex flex-col items-center gap-1 transition-all duration-500 shadow-2xl
+                     mt-[4vh] rounded-3xl w-[85%] py-[3vh] border-2 flex flex-col items-center gap-1 transition-all duration-500 shadow-2xl
                      ${highlight 
                         ? 'bg-yellow-500 text-blue-950 border-yellow-400 scale-105' 
                         : 'bg-lubel-primary border-white/10 text-white'}
@@ -399,33 +404,30 @@ export const TVDisplay: React.FC = () => {
              </div>
          </div>
 
-         {/* RIGHT: SIDEBAR (5 cols) */}
-         <div className="col-span-5 flex flex-col h-full gap-8">
+         {/* RIGHT: SIDEBAR */}
+         <div className="col-span-5 flex flex-col h-full gap-6">
              
-             {/* HEADER: CLOCK & WEATHER */}
-             <div className="h-[15%] flex justify-between items-center bg-lubel-surface/80 rounded-2xl p-6 border border-white/5 shadow-card">
-                <WeatherWidget />
-                <div className="w-px h-12 bg-white/10 mx-4"></div>
-                <DigitalClock />
+             {/* CLOCK & WEATHER */}
+             <div className="h-[20%] flex overflow-hidden bg-lubel-surface/80 rounded-2xl border border-white/5 shadow-card">
+                <div className="flex-1 border-r border-white/5"><DigitalClock /></div>
+                <div className="flex-1"><WeatherWidget /></div>
              </div>
 
              {/* HISTORY */}
-             <div className="flex-1 bg-lubel-surface/80 rounded-3xl border border-white/5 shadow-card flex flex-col overflow-hidden p-8 relative">
-                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-50"></div>
-                 
-                 <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/10">
+             <div className="flex-1 bg-lubel-surface/80 rounded-3xl border border-white/5 shadow-card flex flex-col overflow-hidden p-6 relative">
+                 <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/10">
                     <Clock className="w-5 h-5 text-yellow-500" />
                     <span className="text-slate-400 font-bold uppercase tracking-widest text-sm">Últimas Chamadas</span>
                  </div>
 
-                 <div className="flex-1 flex flex-col gap-5">
+                 <div className="flex-1 flex flex-col gap-4">
                     {queueState.history.slice(0, 5).map((t, i) => {
                        const opacity = i === 0 ? 1 : Math.max(0.2, 0.6 - (i * 0.15));
                        const isRetroactive = t.isRetroactive;
                        
                        return (
                           <div key={i} style={{ opacity }} className={`
-                             flex items-center justify-between p-5 rounded-2xl border transition-all duration-500 relative overflow-hidden group
+                             flex items-center justify-between p-4 rounded-2xl border transition-all duration-500 relative overflow-hidden group
                              ${i === 0 && highlight 
                                 ? 'bg-yellow-500/10 border-yellow-500/50 scale-105 z-10' 
                                 : 'bg-black/20 border-white/5'}
@@ -435,11 +437,11 @@ export const TVDisplay: React.FC = () => {
                                     <div className="bg-red-500 text-white text-[8px] font-bold px-1.5 rounded uppercase">Rechamada</div>
                                  </div>
                              )}
-                             <span className={`text-5xl font-mono font-bold tracking-tighter drop-shadow-md ${i === 0 && highlight ? 'text-yellow-400' : 'text-slate-200'}`}>
+                             <span className={`text-4xl font-mono font-bold tracking-tighter drop-shadow-md ${i === 0 && highlight ? 'text-yellow-400' : 'text-slate-200'}`}>
                                 {String(t.number).padStart(3, '0')}
                              </span>
                              <div className="text-right">
-                                <span className={`text-2xl font-bold ${i === 0 && highlight ? 'text-white' : 'text-slate-500'}`}>
+                                <span className={`text-xl font-bold ${i === 0 && highlight ? 'text-white' : 'text-slate-500'}`}>
                                    Balcão {String(t.desk).padStart(2, '0')}
                                 </span>
                              </div>
