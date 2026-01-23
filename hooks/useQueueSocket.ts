@@ -9,7 +9,7 @@ export const useQueueSocket = () => {
     lastCalledDesk: null,
     history: [],
     stats: { totalCallsToday: 0, averageServiceTime: 0 },
-    music: { videoId: null, playlistId: null, title: '', thumbnail: '', isPlaying: false, volume: 50 }
+    music: { videoId: null, title: '', thumbnail: '', isPlaying: false, volume: 50 }
   });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number>(0);
