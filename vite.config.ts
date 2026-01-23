@@ -5,9 +5,9 @@ import legacy from '@vitejs/plugin-legacy';
 export default defineConfig({
   plugins: [
     react(),
+    // This plugin creates a version of the code compatible with old browsers (Smart TVs)
     legacy({
-      // Lowered targets for better TV compatibility
-      targets: ['chrome >= 60', 'safari >= 11', 'ios >= 11', 'firefox >= 60', 'edge >= 79'],
+      targets: ['chrome >= 64', 'edge >= 79', 'safari >= 11', 'firefox >= 67'],
       additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
       renderLegacyChunks: true,
       modernPolyfills: true
@@ -15,34 +15,18 @@ export default defineConfig({
   ],
   server: {
     port: 3000,
-    host: true, // Listen on all addresses (0.0.0.0)
+    host: '0.0.0.0', 
     strictPort: true,
-    cors: true,
-    proxy: {
-      '/socket.io': {
-        target: 'http://127.0.0.1:3001', // Use IPv4 loopback explicitly
-        ws: true,
-        changeOrigin: true,
-        secure: false,
-      }
-    }
+    allowedHosts: true, // Allow all hosts for local network
+    cors: true
   },
   preview: {
     port: 3000,
-    host: true,
-    strictPort: true,
-    cors: true,
-    proxy: {
-      '/socket.io': {
-        target: 'http://127.0.0.1:3001',
-        ws: true,
-        changeOrigin: true,
-        secure: false,
-      }
-    }
+    host: '0.0.0.0',
+    allowedHosts: true,
   },
   build: {
-    target: 'es2015',
-    minify: 'terser',
+    target: 'es2015', // Lowers the JS target version
+    minify: 'terser', // Uses better minification for old devices
   }
 });
