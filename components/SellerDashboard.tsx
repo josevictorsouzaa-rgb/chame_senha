@@ -5,7 +5,9 @@ import {
   RotateCcw, ChevronRight, Megaphone,
   Monitor, AlertCircle, Settings, 
   Menu, X, CheckCircle, AlertTriangle,
-  BarChart3, Trophy, Calendar, LayoutDashboard
+  BarChart3, Trophy, Calendar, LayoutDashboard,
+  Music, Play, Pause, Square, Link as LinkIcon, Volume2,
+  SkipForward, SkipBack, ListMusic
 } from 'lucide-react';
 import { AnalyticsData } from '../types';
 
@@ -75,6 +77,155 @@ const ConfigModal = ({ isOpen, onClose, onConfirm, current }: any) => {
       </div>
     </div>
   );
+};
+
+// --- MUSIC PLAYER COMPONENT ---
+const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
+   const [url, setUrl] = useState('');
+   const [loading, setLoading] = useState(false);
+
+   const extractIds = (link: string) => {
+      const vidReg = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+      const listReg = /[?&]list=([^#&?]+)/;
+      
+      const vidMatch = link.match(vidReg);
+      const listMatch = link.match(listReg);
+
+      return {
+          videoId: (vidMatch && vidMatch[2].length === 11) ? vidMatch[2] : null,
+          playlistId: listMatch ? listMatch[1] : null
+      };
+   };
+
+   const handlePlay = async () => {
+      const { videoId, playlistId } = extractIds(url);
+      if (!videoId && !playlistId) return;
+      
+      setLoading(true);
+      try {
+         // If it's a playlist, we might not get thumbnail easily via noembed without a specific video ID
+         // If we have videoId, fetch that. If only playlist, generic thumbnail.
+         let title = 'Playlist Carregada';
+         let thumbnail = 'https://img.youtube.com/vi/default/hqdefault.jpg';
+
+         if (videoId) {
+            const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
+            const data = await res.json();
+            title = data.title || title;
+            thumbnail = data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/0.jpg`;
+         }
+         
+         onSetMusic({
+            videoId: videoId,
+            playlistId: playlistId,
+            title: title + (playlistId ? ' (Playlist)' : ''),
+            thumbnail: thumbnail,
+            isPlaying: true,
+            volume: 50
+         });
+         setUrl('');
+      } catch (e) {
+         console.error(e);
+      } finally {
+         setLoading(false);
+      }
+   };
+
+   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      onSetMusic({ volume: Number(e.target.value) });
+   };
+
+   const hasActiveMedia = musicState.videoId || musicState.playlistId;
+
+   return (
+      <div className="bg-white rounded-xl shadow-card border border-slate-200 p-5 mt-6">
+         <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide flex items-center gap-2 mb-4">
+            <Music className="w-4 h-4 text-pink-600" />
+            Som Ambiente (TV)
+         </h3>
+
+         {hasActiveMedia ? (
+            <div className="flex flex-col gap-4">
+               {/* Display Current Track Info */}
+               <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  <img src={musicState.thumbnail} className="w-16 h-16 rounded-lg object-cover bg-slate-200 shadow-sm" />
+                  <div className="flex-1 min-w-0">
+                     <p className="text-sm font-bold text-slate-900 truncate">{musicState.title}</p>
+                     <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                        {musicState.isPlaying ? (
+                           <span className="text-green-600 font-bold flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Reproduzindo
+                           </span>
+                        ) : (
+                           <span className="text-slate-400 font-medium">Pausado</span>
+                        )}
+                        {musicState.playlistId && <span className="ml-2 text-brand-600 font-bold px-2 py-0.5 bg-brand-50 rounded-full text-[10px]">PLAYLIST</span>}
+                     </p>
+                  </div>
+                  <button 
+                     onClick={() => onSetMusic({ videoId: null, playlistId: null, isPlaying: false })}
+                     className="p-2 bg-red-50 hover:bg-red-100 rounded-full text-red-600 transition-colors"
+                     title="Parar e Remover"
+                  >
+                     <Square className="w-5 h-5" />
+                  </button>
+               </div>
+
+               {/* Remote Controls */}
+               <div className="grid grid-cols-3 gap-3">
+                    <button onClick={() => onCommand('prev')} className="flex items-center justify-center p-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold active:scale-95 transition-all">
+                        <SkipBack className="w-6 h-6" />
+                    </button>
+                    
+                    <button 
+                        onClick={() => {
+                            if (musicState.isPlaying) onCommand('pause');
+                            else onCommand('play');
+                        }} 
+                        className={`flex items-center justify-center p-4 rounded-xl shadow-md active:scale-95 transition-all ${musicState.isPlaying ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                    >
+                        {musicState.isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8" />}
+                    </button>
+
+                    <button onClick={() => onCommand('next')} className="flex items-center justify-center p-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold active:scale-95 transition-all">
+                        <SkipForward className="w-6 h-6" />
+                    </button>
+               </div>
+               
+               {/* Volume Control */}
+               <div className="bg-slate-50 p-3 rounded-lg flex items-center gap-3 border border-slate-100">
+                  <Volume2 className="w-4 h-4 text-slate-400" />
+                  <input 
+                     type="range" 
+                     min="0" 
+                     max="100" 
+                     value={musicState.volume || 50} 
+                     onChange={handleVolumeChange}
+                     className="flex-1 accent-brand-600 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <span className="text-xs font-mono font-bold text-slate-500 w-8 text-right">{musicState.volume || 50}%</span>
+               </div>
+            </div>
+         ) : (
+            <div className="flex gap-2">
+               <input 
+                  type="text" 
+                  value={url}
+                  onChange={e => setUrl(e.target.value)}
+                  placeholder="Cole o link do YouTube (Vídeo ou Playlist)..."
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-500 outline-none"
+               />
+               <button 
+                  disabled={!url || loading}
+                  onClick={handlePlay}
+                  className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50"
+               >
+                  {loading ? '...' : <Play className="w-4 h-4" />}
+               </button>
+            </div>
+         )}
+      </div>
+   );
 };
 
 // --- ANALYTICS VIEW COMPONENT ---
@@ -393,7 +544,7 @@ export const SellerDashboard: React.FC = () => {
                      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
                         <div className="mb-10 relative">
                            <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.2em] mb-4">Senha em Atendimento</p>
-                           <div className="text-[9rem] leading-none font-mono font-bold text-slate-900 tracking-tighter drop-shadow-sm">
+                           <div className="text-[9rem] leading-none font-sans font-bold text-slate-900 tracking-tighter drop-shadow-sm">
                               {String(queueState.currentTicket).padStart(3, '0')}
                            </div>
                            {queueState.lastCalledDesk && (
@@ -440,59 +591,64 @@ export const SellerDashboard: React.FC = () => {
                   </div>
                </div>
 
-               {/* HISTORY SIDEBAR */}
-               <div className="flex-[1.5] bg-white rounded-xl shadow-card border border-slate-200 flex flex-col overflow-hidden">
-                  <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex justify-between items-center">
-                     <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Histórico</h3>
-                     <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded">Últimos 15</span>
-                  </div>
+               {/* HISTORY & MUSIC SIDEBAR */}
+               <div className="flex-[1.5] flex flex-col gap-6">
+                   {/* MUSIC CONTROLLER */}
+                   <MusicController musicState={queueState.music} onSetMusic={actions.setMusic} onCommand={actions.sendPlayerCommand} />
 
-                  <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
-                     <table className="w-full text-left">
-                        <thead className="bg-slate-50 sticky top-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                           <tr>
-                              <th className="px-5 py-2">Senha</th>
-                              <th className="px-5 py-2">Mesa</th>
-                              <th className="px-5 py-2 text-right"></th>
-                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                           {queueState.history.slice(0, 15).map((ticket, index) => {
-                              const isMine = ticket.desk === currentUser.desk;
-                              const isCurrent = index === 0;
-                              return (
-                                 <tr key={index} className={`hover:bg-slate-50 transition-colors ${isCurrent ? 'bg-brand-50/40' : ''}`}>
-                                    <td className="px-5 py-3">
-                                       <span className={`font-mono font-bold text-lg ${isCurrent ? 'text-brand-600' : 'text-slate-700'}`}>
-                                          {String(ticket.number).padStart(3, '0')}
-                                       </span>
-                                    </td>
-                                    <td className="px-5 py-3">
-                                       <div className="flex flex-col">
-                                          <span className="text-sm font-bold text-slate-600">{ticket.desk}</span>
-                                          {isMine && <span className="text-[10px] text-brand-600 font-bold uppercase">Você</span>}
-                                       </div>
-                                    </td>
-                                    <td className="px-5 py-3 text-right">
-                                       <button 
-                                          onClick={() => actions.callSpecific(ticket.number, true)}
-                                          className="text-slate-300 hover:text-brand-600 p-2 hover:bg-brand-50 rounded transition-all"
-                                          title="Rechamar"
-                                       >
-                                          <Megaphone className="w-4 h-4" />
-                                       </button>
-                                    </td>
-                                 </tr>
-                              );
-                           })}
-                        </tbody>
-                     </table>
-                     {queueState.history.length === 0 && (
-                        <div className="p-8 text-center text-slate-400 text-xs uppercase font-medium">
-                           Sem chamadas hoje
-                        </div>
-                     )}
-                  </div>
+                   <div className="flex-1 bg-white rounded-xl shadow-card border border-slate-200 flex flex-col overflow-hidden">
+                      <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex justify-between items-center">
+                         <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Histórico</h3>
+                         <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded">Últimos 15</span>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
+                         <table className="w-full text-left">
+                            <thead className="bg-slate-50 sticky top-0 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                               <tr>
+                                  <th className="px-5 py-2">Senha</th>
+                                  <th className="px-5 py-2">Mesa</th>
+                                  <th className="px-5 py-2 text-right"></th>
+                               </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                               {queueState.history.slice(0, 15).map((ticket, index) => {
+                                  const isMine = ticket.desk === currentUser.desk;
+                                  const isCurrent = index === 0;
+                                  return (
+                                     <tr key={index} className={`hover:bg-slate-50 transition-colors ${isCurrent ? 'bg-brand-50/40' : ''}`}>
+                                        <td className="px-5 py-3">
+                                           <span className={`font-mono font-bold text-lg ${isCurrent ? 'text-brand-600' : 'text-slate-700'}`}>
+                                              {String(ticket.number).padStart(3, '0')}
+                                           </span>
+                                        </td>
+                                        <td className="px-5 py-3">
+                                           <div className="flex flex-col">
+                                              <span className="text-sm font-bold text-slate-600">{ticket.desk}</span>
+                                              {isMine && <span className="text-[10px] text-brand-600 font-bold uppercase">Você</span>}
+                                           </div>
+                                        </td>
+                                        <td className="px-5 py-3 text-right">
+                                           <button 
+                                              onClick={() => actions.callSpecific(ticket.number, true)}
+                                              className="text-slate-300 hover:text-brand-600 p-2 hover:bg-brand-50 rounded transition-all"
+                                              title="Rechamar"
+                                           >
+                                              <Megaphone className="w-4 h-4" />
+                                           </button>
+                                        </td>
+                                     </tr>
+                                  );
+                               })}
+                            </tbody>
+                         </table>
+                         {queueState.history.length === 0 && (
+                            <div className="p-8 text-center text-slate-400 text-xs uppercase font-medium">
+                               Sem chamadas hoje
+                            </div>
+                         )}
+                      </div>
+                   </div>
                </div>
             </div>
          ) : (

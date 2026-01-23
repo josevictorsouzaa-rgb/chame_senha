@@ -12,6 +12,12 @@ app.use(cors());
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Serve static files from the build directory
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
@@ -25,7 +31,15 @@ let db = {
     currentTicket: 0,
     lastCalledDesk: null,
   },
-  // Users are accounts now, desk is assigned on login
+  // Default music state
+  music: {
+    videoId: null,
+    playlistId: null,
+    title: '',
+    thumbnail: '',
+    isPlaying: false,
+    volume: 50
+  },
   users: [
     { id: 'u1', username: 'vendedor1', password: '123', name: 'Carlos Silva', totalCalls: 0, history: [] },
     { id: 'u2', username: 'vendedor2', password: '123', name: 'Ana Souza', totalCalls: 0, history: [] },
@@ -40,7 +54,6 @@ let db = {
   }
 };
 
-// In-memory tracking of active desks (SocketID -> Desk)
 const activeDesks = new Map(); 
 
 // --- HELPER FUNCTIONS ---
@@ -58,7 +71,6 @@ const resetDailyStatsIfNeeded = () => {
       count: 0,
       totalDuration: 0
     };
-    console.log('Daily stats reset for new day:', today);
     saveData();
   }
 };
@@ -73,6 +85,8 @@ const loadData = () => {
         ...db,
         ...loaded,
         config: { ...db.config, ...loaded.config },
+        // Ensure music object exists if loading from old file
+        music: { ...db.music, ...(loaded.music || {}) },
         users: (loaded.users || db.users).map(u => ({...u, history: u.history || []})),
         history: loaded.history || [],
         dailyStats: loaded.dailyStats || db.dailyStats
@@ -80,7 +94,6 @@ const loadData = () => {
       console.log('Database loaded.');
     } else {
       saveData();
-      console.log('Database created.');
     }
   } catch (err) {
     console.error('Error loading data:', err);
@@ -107,7 +120,8 @@ const getPublicState = () => ({
   stats: {
     totalCallsToday: db.dailyStats.count,
     averageServiceTime: getAvgServiceTime()
-  }
+  },
+  music: db.music
 });
 
 const getUserStats = (userId, currentDesk) => {
@@ -128,7 +142,7 @@ const getUserStats = (userId, currentDesk) => {
     id: user.id,
     username: user.username,
     name: user.name,
-    desk: currentDesk, // Dynamic desk
+    desk: currentDesk, 
     totalCalls: user.totalCalls,
     stats: {
       today: callsToday,
@@ -138,25 +152,14 @@ const getUserStats = (userId, currentDesk) => {
   };
 };
 
-// Analytics Logic
+// Analytics Logic (Simplified)
 const calculateAnalytics = (userId) => {
   const user = db.users.find(u => u.id === userId);
   const currentYear = new Date().getFullYear();
   const currentMonthKey = getMonthKey();
-
-  // --- Store Analytics ---
   const storeByDate = {};
   let storeMaxDay = { date: '-', count: 0 };
   
-  // We scan the global history for store stats
-  // Note: db.history is truncated in the live object to 20 for performance in callNext,
-  // but for a REAL system, we would query the persistent DB. 
-  // IMPORTANT: Since we don't have a SQL DB, we can only analyze what's in memory.
-  // Ideally, 'history' shouldn't be truncated in 'db' if we want long-term stats, 
-  // or we should store stats separately. 
-  // *Patch for this exercise*: I will assume db.history holds more data or we use user histories to aggregate.
-  
-  // Let's aggregate from ALL users histories to get the "Store" picture since db.history is truncated
   const allUserHistories = db.users.flatMap(u => u.history || []);
 
   allUserHistories.forEach(h => {
@@ -168,10 +171,9 @@ const calculateAnalytics = (userId) => {
     }
   });
 
-  // --- User Analytics ---
   const userHistory = user?.history || [];
   const userByDate = {};
-  const userByMonth = {}; // 'Jan': 10
+  const userByMonth = {}; 
   let userBestDay = { date: '-', count: 0 };
   let annualCount = 0;
   let monthCount = 0;
@@ -180,30 +182,24 @@ const calculateAnalytics = (userId) => {
     const d = new Date(h.timestamp);
     const dateKey = d.toLocaleDateString();
     const year = d.getFullYear();
-    const monthIndex = d.getMonth(); // 0-11
+    const monthIndex = d.getMonth(); 
     const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-    const monthName = d.toLocaleDateString('pt-BR', { month: 'short' }); // jan, fev
 
-    // Daily Best
     userByDate[dateKey] = (userByDate[dateKey] || 0) + 1;
     if (userByDate[dateKey] > userBestDay.count) {
       userBestDay = { date: dateKey, count: userByDate[dateKey] };
     }
 
-    // Annual
     if (year === currentYear) {
       annualCount++;
-      // Monthly Chart Data (Only current year)
       userByMonth[monthIndex] = (userByMonth[monthIndex] || 0) + 1;
     }
 
-    // Current Month
     if (monthKey === currentMonthKey) {
       monthCount++;
     }
   });
 
-  // Format Monthly History for Chart (Array 0-11)
   const monthlyHistory = [];
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   for(let i=0; i<12; i++) {
@@ -241,16 +237,12 @@ io.on('connection', (socket) => {
       return callback({ success: false, message: 'Credenciais inválidas.' });
     }
 
-    // Check desk exclusivity
-    // Convert Map values to array to check if desk is taken
     const usedDesks = Array.from(activeDesks.values());
     if (usedDesks.includes(desk)) {
       return callback({ success: false, message: `Balcão ${desk} já está em uso por outro operador.` });
     }
 
-    // Register desk to this socket
     activeDesks.set(socket.id, desk);
-
     const userData = getUserStats(user.id, desk);
     callback({ success: true, user: userData });
   });
@@ -263,15 +255,30 @@ io.on('connection', (socket) => {
 
   // --- ACTIONS ---
   
+  socket.on('setMusic', (musicData) => {
+    db.music = { ...db.music, ...musicData };
+    saveData();
+    io.emit('update', getPublicState());
+  });
+
+  socket.on('playerControl', (action) => {
+    // Broadcast the command to all clients (specifically for the TV to hear)
+    io.emit('player_command', action);
+    
+    // Also update server state for play/pause consistency
+    if (action === 'pause') db.music.isPlaying = false;
+    if (action === 'play') db.music.isPlaying = true;
+    // Note: Next/Prev track logic is handled client-side on TV via YouTube API
+    saveData();
+  });
+
   socket.on('getAnalytics', (userId, callback) => {
-    // Only allow if user exists (simple auth check)
     const stats = calculateAnalytics(userId);
     callback(stats);
   });
 
   socket.on('setTicketNumber', (number) => {
     db.config.currentTicket = number;
-    // We don't reset history, just the pointer
     saveData();
     io.emit('update', getPublicState());
   });
@@ -279,10 +286,6 @@ io.on('connection', (socket) => {
   socket.on('callNext', (userId) => {
     resetDailyStatsIfNeeded();
     const user = db.users.find(u => u.id === userId);
-    // Determine desk from socket connection or passed data. 
-    // Ideally we verify socket ownership, but for simplicity we rely on activeDesks or user state
-    // We need to trust the client sending the desk OR map userId to desk.
-    // Let's use the activeDesks map via socket.id to be secure
     const desk = activeDesks.get(socket.id);
 
     if (!user || !desk) return;
@@ -298,18 +301,13 @@ io.on('connection', (socket) => {
 
     db.config.currentTicket++;
     db.config.lastCalledDesk = desk;
-
     db.dailyStats.count++;
     user.totalCalls++;
     user.lastCallTimestamp = now;
     
-    // Store in User History (Used for Analytics)
-    // We do NOT truncate user history in this version to support analytics
-    // In production, this needs a DB. For JSON file, let's keep it but be careful.
     if (!user.history) user.history = [];
     user.history.unshift({ timestamp: new Date().toISOString(), number: db.config.currentTicket, desk: desk });
     
-    // Store in Global History (Truncated for Display)
     db.history.unshift({
       number: db.config.currentTicket,
       desk: desk,
@@ -376,7 +374,15 @@ io.on('connection', (socket) => {
   });
 });
 
+// Fallback for SPA routing if building for production
+if (fs.existsSync(distPath)) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+// Listen on 0.0.0.0 for external access
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });

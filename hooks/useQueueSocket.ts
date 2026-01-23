@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { QueueState, User, AuthResponse, LoginPayload, AnalyticsData } from '../types';
-
-const SERVER_URL = 'http://localhost:3001';
+import { QueueState, User, AuthResponse, LoginPayload, AnalyticsData, MusicState } from '../types';
 
 export const useQueueSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -10,29 +8,53 @@ export const useQueueSocket = () => {
     currentTicket: 0,
     lastCalledDesk: null,
     history: [],
-    stats: { totalCallsToday: 0, averageServiceTime: 0 }
+    stats: { totalCallsToday: 0, averageServiceTime: 0 },
+    music: { videoId: null, playlistId: null, title: '', thumbnail: '', isPlaying: false, volume: 50 }
   });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number>(0);
-  
+  const [playerCommand, setPlayerCommand] = useState<{action: string, timestamp: number} | null>(null);
+
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    socketRef.current = io(SERVER_URL, {
+    // Determine connection URL
+    // In production (served by server.js), undefined works (same origin).
+    // In dev, we try to use the proxy (undefined -> localhost:3000/socket.io).
+    // However, if proxy fails, we might want to configure this differently.
+    // For robustness, we stick to 'undefined' to leverage the proxy or same-origin.
+    
+    // Check if we are in development mode to enable debug logs
+    const isDev = (import.meta as any).env?.DEV;
+    if (isDev) console.log('Initializing socket connection...');
+
+    socketRef.current = io(undefined, {
         transports: ['websocket', 'polling'],
-        reconnectionAttempts: 5,
+        reconnectionAttempts: Infinity, // Keep trying
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
+        autoConnect: true,
+        forceNew: true
     });
 
     const socket = socketRef.current;
 
     socket.on('connect', () => {
         setIsConnected(true);
-        // We do NOT auto-login from localstorage anymore because desk selection is mandatory per session
-        // Clean up old session data
+        if (isDev) console.log('Socket connected successfully:', socket.id);
         localStorage.removeItem('autoparts_user');
     });
 
-    socket.on('disconnect', () => setIsConnected(false));
+    socket.on('connect_error', (err) => {
+        console.error('Socket Connection Error:', err.message);
+        setIsConnected(false);
+    });
+
+    socket.on('disconnect', (reason) => {
+        setIsConnected(false);
+        if (isDev) console.warn('Socket disconnected:', reason);
+    });
 
     socket.on('init', (data: QueueState) => setQueueState(data));
     
@@ -43,6 +65,10 @@ export const useQueueSocket = () => {
 
     socket.on('user_update', (user: User) => {
         setCurrentUser(user);
+    });
+    
+    socket.on('player_command', (action: string) => {
+        setPlayerCommand({ action, timestamp: Date.now() });
     });
 
     return () => {
@@ -55,7 +81,7 @@ export const useQueueSocket = () => {
   const login = (creds: LoginPayload): Promise<AuthResponse> => {
     return new Promise((resolve) => {
         if (!socketRef.current?.connected) {
-             resolve({ success: false, message: 'Sem conexão com servidor.' });
+             resolve({ success: false, message: 'Erro de conexão: Servidor indisponível.' });
              return;
         }
         socketRef.current.emit('login', creds, (response: AuthResponse) => {
@@ -69,9 +95,8 @@ export const useQueueSocket = () => {
 
   const logout = () => {
       setCurrentUser(null);
-      if (socketRef.current) socketRef.current.disconnect();
-      // Reconnect to keep socket alive for login screen
-      socketRef.current = io(SERVER_URL);
+      // Do not disconnect socket, just clear user state
+      // We want to stay connected to receive updates
   };
 
   const callNext = useCallback(() => {
@@ -104,11 +129,20 @@ export const useQueueSocket = () => {
     }
   }, [currentUser]);
 
+  const setMusic = useCallback((music: Partial<MusicState>) => {
+    if (socketRef.current?.connected) socketRef.current.emit('setMusic', music);
+  }, []);
+
+  const sendPlayerCommand = useCallback((action: 'next' | 'prev' | 'play' | 'pause') => {
+    if (socketRef.current?.connected) socketRef.current.emit('playerControl', action);
+  }, []);
+
   return {
     isConnected,
     queueState,
     currentUser,
     lastUpdateTimestamp,
+    playerCommand,
     actions: {
       login,
       logout,
@@ -117,7 +151,9 @@ export const useQueueSocket = () => {
       recallCurrent,
       revertPrevious,
       setTicketNumber,
-      getAnalytics
+      getAnalytics,
+      setMusic,
+      sendPlayerCommand
     }
   };
 };

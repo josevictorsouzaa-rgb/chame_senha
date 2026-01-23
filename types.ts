@@ -1,3 +1,4 @@
+
 export interface User {
   id: string;
   username: string;
@@ -19,6 +20,16 @@ export interface Ticket {
   isRetroactive?: boolean; // If true, visual distinction on TV
 }
 
+export interface MusicState {
+  videoId: string | null; // Used for single video OR fallback
+  playlistId: string | null; // New: Supports playlists
+  title: string;
+  thumbnail: string;
+  isPlaying: boolean;
+  volume: number; // 0-100
+  lastCommand?: { type: 'next' | 'prev' | 'pause' | 'play', timestamp: number }; // For remote control
+}
+
 export interface QueueState {
   currentTicket: number;
   lastCalledDesk: string | null;
@@ -27,6 +38,7 @@ export interface QueueState {
     totalCallsToday: number;
     averageServiceTime: number; // in seconds
   };
+  music: MusicState;
 }
 
 export interface AuthResponse {
@@ -64,6 +76,8 @@ export interface ClientEvents {
   'revert': () => void;
   'setTicketNumber': (number: number) => void; // New: Manual sync
   'getAnalytics': (userId: string, callback: (data: AnalyticsData) => void) => void;
+  'setMusic': (music: Partial<MusicState>) => void;
+  'playerControl': (action: 'next' | 'prev' | 'play' | 'pause') => void;
 }
 
 export interface SocketEvents {
@@ -71,4 +85,5 @@ export interface SocketEvents {
   'update': (state: QueueState & { recall?: boolean }) => void;
   'user_update': (user: User) => void;
   'error': (msg: string) => void;
+  'player_command': (action: 'next' | 'prev' | 'play' | 'pause') => void;
 }
