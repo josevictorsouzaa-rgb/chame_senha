@@ -5,10 +5,10 @@
 body {
   margin: 0;
   padding: 0;
-  background-color: #020617; /* Slate 950 base */
+  background-color: #020617; 
   color: #f8fafc;
   -webkit-font-smoothing: antialiased;
-  overflow: hidden; /* Prevent scrolling on TV */
+  overflow: hidden; 
 }
 
 /* Custom Scrollbar */
@@ -23,7 +23,6 @@ body {
   border-radius: 4px;
 }
 
-/* Error Logger for TV Debugging */
 #tv-debug-layer {
   display: none;
   position: fixed;
@@ -39,43 +38,19 @@ body {
   white-space: pre-wrap;
 }
 
-/* Optimized Animations for Low-End Hardware (TVs) */
-
-@keyframes pop-blue {
-  0% { 
-    transform: scale(0.5); 
-    opacity: 0;
-  }
-  60% { 
-    transform: scale(1.1); 
-    opacity: 1;
-  }
-  100% { 
-    transform: scale(1); 
-    opacity: 1;
-  }
+/* TV Optimization: Marquee */
+.animate-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform; /* Force GPU acceleration on TV */
 }
 
-.animate-pop-blue {
-  /* Hardware acceleration hint */
-  will-change: transform, opacity;
-  animation: pop-blue 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+/* TV Optimization: Reduce complex shadow rendering cost */
+.shadow-xl, .shadow-2xl {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.7) !important;
 }
 
-@keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.animate-spin-slow {
-  animation: spin-slow 8s linear infinite;
-}
-
-@keyframes pulse-opacity {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.animate-pulse-slow {
-  animation: pulse-opacity 3s ease-in-out infinite;
+/* Ensure high contrast for text on TV */
+.text-slate-400 {
+  color: #94a3b8 !important; /* Slightly lighter for readability on dark screens */
 }
