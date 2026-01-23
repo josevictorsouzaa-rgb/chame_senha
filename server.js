@@ -25,18 +25,23 @@ let db = {
     currentTicket: 0,
     lastCalledDesk: null,
   },
+  // Users are accounts now, desk is assigned on login
   users: [
-    { id: 'u1', username: 'vendedor1', password: '123', name: 'Carlos Silva', desk: '01', totalCalls: 0, history: [] },
-    { id: 'u2', username: 'vendedor2', password: '123', name: 'Ana Souza', desk: '02', totalCalls: 0, history: [] },
-    { id: 'admin', username: 'admin', password: 'admin', name: 'Gerente', desk: 'ADM', totalCalls: 0, history: [] }
+    { id: 'u1', username: 'vendedor1', password: '123', name: 'Carlos Silva', totalCalls: 0, history: [] },
+    { id: 'u2', username: 'vendedor2', password: '123', name: 'Ana Souza', totalCalls: 0, history: [] },
+    { id: 'u3', username: 'vendedor3', password: '123', name: 'Roberto Firmino', totalCalls: 0, history: [] },
+    { id: 'admin', username: 'admin', password: 'admin', name: 'Gerente Operacional', totalCalls: 0, history: [] }
   ],
-  history: [], // Global Ticket History
+  history: [], 
   dailyStats: {
     date: new Date().toLocaleDateString(),
     count: 0,
     totalDuration: 0, 
   }
 };
+
+// In-memory tracking of active desks (SocketID -> Desk)
+const activeDesks = new Map(); 
 
 // --- HELPER FUNCTIONS ---
 
@@ -68,7 +73,6 @@ const loadData = () => {
         ...db,
         ...loaded,
         config: { ...db.config, ...loaded.config },
-        // Ensure users structure is correct (map over to ensure history array exists)
         users: (loaded.users || db.users).map(u => ({...u, history: u.history || []})),
         history: loaded.history || [],
         dailyStats: loaded.dailyStats || db.dailyStats
@@ -91,12 +95,8 @@ const saveData = () => {
   }
 };
 
-// Calculate Average Service Time (Global - Simplified logic based on intervals)
 const getAvgServiceTime = () => {
   if (db.dailyStats.count <= 1) return 0;
-  // Simple avg: (Total time open / Count) - crude approximation for queue speed
-  // A better metric for this specific request "time from one service to another"
-  // is calculated per user when they click call.
   return Math.round(db.dailyStats.totalDuration / db.dailyStats.count);
 };
 
@@ -110,7 +110,7 @@ const getPublicState = () => ({
   }
 });
 
-const getUserStats = (userId) => {
+const getUserStats = (userId, currentDesk) => {
   const user = db.users.find(u => u.id === userId);
   if (!user) return null;
 
@@ -128,7 +128,7 @@ const getUserStats = (userId) => {
     id: user.id,
     username: user.username,
     name: user.name,
-    desk: user.desk,
+    desk: currentDesk, // Dynamic desk
     totalCalls: user.totalCalls,
     stats: {
       today: callsToday,
@@ -144,48 +144,76 @@ resetDailyStatsIfNeeded();
 io.on('connection', (socket) => {
   socket.emit('init', getPublicState());
 
-  socket.on('login', ({ username, password }, callback) => {
+  socket.on('login', ({ username, password, desk }, callback) => {
     const user = db.users.find(u => u.username === username && u.password === password);
-    if (user) {
-      const userData = getUserStats(user.id);
-      callback({ success: true, user: userData });
-    } else {
-      callback({ success: false, message: 'Credenciais inválidas.' });
+    
+    if (!user) {
+      return callback({ success: false, message: 'Credenciais inválidas.' });
     }
+
+    // Check desk exclusivity
+    // Convert Map values to array to check if desk is taken
+    const usedDesks = Array.from(activeDesks.values());
+    if (usedDesks.includes(desk)) {
+      return callback({ success: false, message: `Balcão ${desk} já está em uso por outro operador.` });
+    }
+
+    // Register desk to this socket
+    activeDesks.set(socket.id, desk);
+
+    const userData = getUserStats(user.id, desk);
+    callback({ success: true, user: userData });
+  });
+
+  socket.on('disconnect', () => {
+    if (activeDesks.has(socket.id)) {
+      activeDesks.delete(socket.id);
+    }
+  });
+
+  // --- ACTIONS ---
+
+  socket.on('setTicketNumber', (number) => {
+    db.config.currentTicket = number;
+    // We don't reset history, just the pointer
+    saveData();
+    io.emit('update', getPublicState());
   });
 
   socket.on('callNext', (userId) => {
     resetDailyStatsIfNeeded();
     const user = db.users.find(u => u.id === userId);
-    if (!user) return;
+    // Determine desk from socket connection or passed data. 
+    // Ideally we verify socket ownership, but for simplicity we rely on activeDesks or user state
+    // We need to trust the client sending the desk OR map userId to desk.
+    // Let's use the activeDesks map via socket.id to be secure
+    const desk = activeDesks.get(socket.id);
+
+    if (!user || !desk) return;
 
     const now = Date.now();
     
-    // Calculate interval since LAST call by THIS user
     if (user.lastCallTimestamp) {
       const durationSeconds = (now - user.lastCallTimestamp) / 1000;
-      // Sanity check: ignore if > 45 mins (likely break)
       if (durationSeconds < 2700) {
         db.dailyStats.totalDuration += durationSeconds;
       }
     }
 
     db.config.currentTicket++;
-    db.config.lastCalledDesk = user.desk;
+    db.config.lastCalledDesk = desk;
 
     db.dailyStats.count++;
     user.totalCalls++;
     user.lastCallTimestamp = now;
     
-    // Store in user history
     if (!user.history) user.history = [];
-    user.history.unshift({ timestamp: new Date().toISOString(), number: db.config.currentTicket });
-    if(user.history.length > 50) user.history.pop(); // Keep last 50 per user
+    user.history.unshift({ timestamp: new Date().toISOString(), number: db.config.currentTicket, desk: desk });
+    if(user.history.length > 50) user.history.pop();
 
-    // Store in global history
     db.history.unshift({
       number: db.config.currentTicket,
-      desk: user.desk,
+      desk: desk,
       timestamp: new Date().toISOString(),
       caller: user.name
     });
@@ -193,36 +221,33 @@ io.on('connection', (socket) => {
 
     saveData();
     io.emit('update', getPublicState());
-    socket.emit('user_update', getUserStats(userId));
+    socket.emit('user_update', getUserStats(userId, desk));
   });
 
   socket.on('callSpecific', ({ number, userId, isRetroactive }) => {
     resetDailyStatsIfNeeded();
     const user = db.users.find(u => u.id === userId);
-    if (!user) return;
-    
-    let displayTicket = number;
+    const desk = activeDesks.get(socket.id);
+    if (!user || !desk) return;
     
     if (!isRetroactive) {
        db.config.currentTicket = number;
-       db.config.lastCalledDesk = user.desk;
+       db.config.lastCalledDesk = desk;
        user.lastCallTimestamp = Date.now(); 
     } else {
-       db.config.lastCalledDesk = user.desk;
+       db.config.lastCalledDesk = desk;
     }
 
     const ticketEntry = {
-      number: displayTicket,
-      desk: user.desk,
+      number: number,
+      desk: desk,
       timestamp: new Date().toISOString(),
       caller: user.name,
       isRetroactive: !!isRetroactive
     };
 
-    // Add to global
     db.history.unshift(ticketEntry);
     
-    // Add to user history if it's a "real" call (sync), maybe not retroactive
     if (!isRetroactive) {
        if (!user.history) user.history = [];
        user.history.unshift(ticketEntry);
@@ -230,7 +255,7 @@ io.on('connection', (socket) => {
 
     saveData();
     io.emit('update', getPublicState());
-    socket.emit('user_update', getUserStats(userId));
+    socket.emit('user_update', getUserStats(userId, desk));
   });
 
   socket.on('recall', () => {

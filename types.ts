@@ -2,7 +2,7 @@ export interface User {
   id: string;
   username: string;
   name: string;
-  desk: string;
+  desk: string; // Now dynamic based on login selection
   totalCalls: number; // Lifetime
   stats: {
     today: number;
@@ -35,16 +35,24 @@ export interface AuthResponse {
   message?: string;
 }
 
+export interface LoginPayload {
+  username: string;
+  password: string;
+  desk: string;
+}
+
 export interface ClientEvents {
-  'login': (creds: {username: string; password: string}, callback: (res: AuthResponse) => void) => void;
+  'login': (creds: LoginPayload, callback: (res: AuthResponse) => void) => void;
   'callNext': (userId: string) => void;
-  'callSpecific': (payload: { number: number; userId: string; isRetroactive: boolean }) => void; // For retroactive or sync
+  'callSpecific': (payload: { number: number; userId: string; isRetroactive: boolean }) => void;
   'recall': () => void;
   'revert': () => void;
+  'setTicketNumber': (number: number) => void; // New: Manual sync
 }
 
 export interface SocketEvents {
   'init': (state: QueueState) => void;
   'update': (state: QueueState & { recall?: boolean }) => void;
-  'user_update': (user: User) => void; // Update specific connected user stats
+  'user_update': (user: User) => void;
+  'error': (msg: string) => void;
 }

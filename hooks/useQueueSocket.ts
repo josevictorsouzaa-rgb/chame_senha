@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { QueueState, User, AuthResponse } from '../types';
+import { QueueState, User, AuthResponse, LoginPayload } from '../types';
 
 const SERVER_URL = 'http://localhost:3001';
 
@@ -27,11 +27,9 @@ export const useQueueSocket = () => {
 
     socket.on('connect', () => {
         setIsConnected(true);
-        // Try to restore session if localStorage has user data (simple persistence)
-        const savedUser = localStorage.getItem('autoparts_user');
-        if (savedUser) {
-           setCurrentUser(JSON.parse(savedUser));
-        }
+        // We do NOT auto-login from localstorage anymore because desk selection is mandatory per session
+        // Clean up old session data
+        localStorage.removeItem('autoparts_user');
     });
 
     socket.on('disconnect', () => setIsConnected(false));
@@ -45,7 +43,6 @@ export const useQueueSocket = () => {
 
     socket.on('user_update', (user: User) => {
         setCurrentUser(user);
-        localStorage.setItem('autoparts_user', JSON.stringify(user));
     });
 
     return () => {
@@ -55,7 +52,7 @@ export const useQueueSocket = () => {
 
   // --- ACTIONS ---
 
-  const login = (creds: any): Promise<AuthResponse> => {
+  const login = (creds: LoginPayload): Promise<AuthResponse> => {
     return new Promise((resolve) => {
         if (!socketRef.current?.connected) {
              resolve({ success: false, message: 'Sem conexão com servidor.' });
@@ -64,7 +61,6 @@ export const useQueueSocket = () => {
         socketRef.current.emit('login', creds, (response: AuthResponse) => {
             if (response.success && response.user) {
                 setCurrentUser(response.user);
-                localStorage.setItem('autoparts_user', JSON.stringify(response.user));
             }
             resolve(response);
         });
@@ -73,7 +69,9 @@ export const useQueueSocket = () => {
 
   const logout = () => {
       setCurrentUser(null);
-      localStorage.removeItem('autoparts_user');
+      if (socketRef.current) socketRef.current.disconnect();
+      // Reconnect to keep socket alive for login screen
+      socketRef.current = io(SERVER_URL);
   };
 
   const callNext = useCallback(() => {
@@ -96,6 +94,10 @@ export const useQueueSocket = () => {
     if (socketRef.current?.connected) socketRef.current.emit('revert');
   }, []);
 
+  const setTicketNumber = useCallback((number: number) => {
+    if (socketRef.current?.connected) socketRef.current.emit('setTicketNumber', number);
+  }, []);
+
   return {
     isConnected,
     queueState,
@@ -107,7 +109,8 @@ export const useQueueSocket = () => {
       callNext,
       callSpecific,
       recallCurrent,
-      revertPrevious
+      revertPrevious,
+      setTicketNumber
     }
   };
 };

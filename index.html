@@ -3,33 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Queue Master</title>
+    <title>Queue Master Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
-              display: ['Plus Jakarta Sans', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
             },
             colors: {
-              primary: {
-                50: '#f5f3ff',
-                100: '#ede9fe',
-                500: '#8b5cf6', // Violet
-                600: '#7c3aed',
-                700: '#6d28d9',
+              brand: {
+                50: '#eff6ff',
+                100: '#dbeafe',
+                500: '#3b82f6',
+                600: '#2563eb', // Enterprise Blue
+                700: '#1d4ed8',
+                800: '#1e40af',
+                900: '#1e3a8a',
               },
-              dark: {
-                bg: '#0f172a',
-                card: '#1e293b',
+              slate: {
+                850: '#1e293b', // Custom dark for headers
               }
             },
             boxShadow: {
-              'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
-              'glow': '0 0 20px rgba(124, 58, 237, 0.5)',
+              'card': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+              'action': '0 4px 6px -1px rgba(37, 99, 235, 0.2), 0 2px 4px -1px rgba(37, 99, 235, 0.1)',
             }
           }
         }
@@ -39,29 +40,27 @@
       body {
         margin: 0;
         padding: 0;
-        background-color: #f8fafc;
-        color: #1e293b;
+        background-color: #f1f5f9; /* Slate 100 */
+        color: #0f172a; /* Slate 900 */
         -webkit-font-smoothing: antialiased;
       }
       
-      /* Smooth transitions for everything */
-      * {
-        transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
-        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-        transition-duration: 200ms;
+      /* Crisp borders for professional look */
+      .pro-border {
+        border: 1px solid #e2e8f0;
       }
-
+      
       /* Custom Scrollbar */
       ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
+        width: 8px;
+        height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: transparent; 
+        background: #f1f5f9; 
       }
       ::-webkit-scrollbar-thumb {
         background: #cbd5e1; 
-        border-radius: 10px;
+        border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8; 
