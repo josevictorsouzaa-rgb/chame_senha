@@ -1,100 +1,48 @@
-import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
-import fs from 'fs';
-import path from 'path';
-import cors from 'cors';
-import { fileURLToPath } from 'url';
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
 
 const app = express();
 app.use(cors());
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Serve static files from the build directory
-const distPath = path.join(__dirname, 'dist');
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
-}
+// In a real deployment, we would serve static build files here
+// app.use(express.static(path.join(__dirname, 'dist')));
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
-  pingTimeout: 60000, // 60s to tolerate laggy TV connections
-  pingInterval: 25000,
-  transports: ['polling', 'websocket'] // Allow polling for better compatibility with strict firewalls/TVs
+  cors: {
+    origin: "*", // Allow all origins for simplicity in this demo environment
+    methods: ["GET", "POST"]
+  }
 });
 
 const DATA_FILE = path.join(__dirname, 'data.json');
 
-// --- DATABASE STRUCTURE ---
-let db = {
-  config: {
-    currentTicket: 0,
-    lastCalledDesk: null,
-  },
-  // Default music state - Lofi Girl (Reliable ID)
-  music: {
-    videoId: 'jfKfPfyJRdk', 
-    title: 'Lofi Girl - Relaxing Beats',
-    thumbnail: 'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
-    isPlaying: true,
-    volume: 50
-  },
-  users: [
-    { id: 'u1', username: 'vendedor1', password: '123', name: 'Carlos Silva', totalCalls: 0, history: [] },
-    { id: 'u2', username: 'vendedor2', password: '123', name: 'Ana Souza', totalCalls: 0, history: [] },
-    { id: 'u3', username: 'vendedor3', password: '123', name: 'Roberto Firmino', totalCalls: 0, history: [] },
-    { id: 'admin', username: 'admin', password: 'admin', name: 'Gerente Operacional', totalCalls: 0, history: [] }
-  ],
-  history: [], 
-  dailyStats: {
-    date: new Date().toLocaleDateString(),
-    count: 0,
-    totalDuration: 0, 
-  }
+// Initial State
+let queueState = {
+  currentTicket: 0,
+  lastCalledDesk: null,
+  history: [] // Array of { number, desk, timestamp }
 };
 
-const activeDesks = new Map(); 
-
-// --- HELPER FUNCTIONS ---
-
-const getMonthKey = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-};
-
-const resetDailyStatsIfNeeded = () => {
-  const today = new Date().toLocaleDateString();
-  if (db.dailyStats.date !== today) {
-    db.dailyStats = {
-      date: today,
-      count: 0,
-      totalDuration: 0
-    };
-    saveData();
-  }
-};
-
+// Persistence Logic
 const loadData = () => {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE);
-      const loaded = JSON.parse(raw);
-      
-      db = {
-        ...db,
-        ...loaded,
-        config: { ...db.config, ...loaded.config },
-        // Ensure music object exists if loading from old file
-        music: { ...db.music, ...(loaded.music || {}) },
-        users: (loaded.users || db.users).map(u => ({...u, history: u.history || []})),
-        history: loaded.history || [],
-        dailyStats: loaded.dailyStats || db.dailyStats
+      const data = JSON.parse(raw);
+      // Validate structure to avoid crashes on bad data
+      queueState = {
+        currentTicket: typeof data.currentTicket === 'number' ? data.currentTicket : 0,
+        lastCalledDesk: data.lastCalledDesk || null,
+        history: Array.isArray(data.history) ? data.history : []
       };
-      console.log('Database loaded.');
+      console.log('Data loaded successfully:', queueState);
     } else {
+      console.log('No existing data file. Starting fresh.');
       saveData();
     }
   } catch (err) {
@@ -104,296 +52,97 @@ const loadData = () => {
 
 const saveData = () => {
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
+    fs.writeFileSync(DATA_FILE, JSON.stringify(queueState, null, 2));
   } catch (err) {
     console.error('Error saving data:', err);
   }
 };
 
-const getAvgServiceTime = () => {
-  if (db.dailyStats.count <= 1) return 0;
-  return Math.round(db.dailyStats.totalDuration / db.dailyStats.count);
-};
-
-const getPublicState = () => ({
-  currentTicket: db.config.currentTicket,
-  lastCalledDesk: db.config.lastCalledDesk,
-  history: db.history.slice(0, 10),
-  stats: {
-    totalCallsToday: db.dailyStats.count,
-    averageServiceTime: getAvgServiceTime()
-  },
-  music: db.music
-});
-
-const getUserStats = (userId, currentDesk) => {
-  const user = db.users.find(u => u.id === userId);
-  if (!user) return null;
-
-  const todayStr = new Date().toLocaleDateString();
-  const monthKey = getMonthKey();
-  const userHistory = user.history || [];
-
-  const callsToday = userHistory.filter(h => new Date(h.timestamp).toLocaleDateString() === todayStr).length;
-  const callsMonth = userHistory.filter(h => {
-    const d = new Date(h.timestamp);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthKey;
-  }).length;
-
-  return {
-    id: user.id,
-    username: user.username,
-    name: user.name,
-    desk: currentDesk, 
-    totalCalls: user.totalCalls,
-    stats: {
-      today: callsToday,
-      month: callsMonth,
-      lastCallTime: user.lastCallTimestamp || null
-    }
-  };
-};
-
-// Analytics Logic (Simplified)
-const calculateAnalytics = (userId) => {
-  const user = db.users.find(u => u.id === userId);
-  const currentYear = new Date().getFullYear();
-  const currentMonthKey = getMonthKey();
-  const storeByDate = {};
-  let storeMaxDay = { date: '-', count: 0 };
-  
-  const allUserHistories = db.users.flatMap(u => u.history || []);
-
-  allUserHistories.forEach(h => {
-    const d = new Date(h.timestamp);
-    const dateKey = d.toLocaleDateString();
-    storeByDate[dateKey] = (storeByDate[dateKey] || 0) + 1;
-    if (storeByDate[dateKey] > storeMaxDay.count) {
-      storeMaxDay = { date: dateKey, count: storeByDate[dateKey] };
-    }
-  });
-
-  const userHistory = user?.history || [];
-  const userByDate = {};
-  const userByMonth = {}; 
-  let userBestDay = { date: '-', count: 0 };
-  let annualCount = 0;
-  let monthCount = 0;
-
-  userHistory.forEach(h => {
-    const d = new Date(h.timestamp);
-    const dateKey = d.toLocaleDateString();
-    const year = d.getFullYear();
-    const monthIndex = d.getMonth(); 
-    const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-
-    userByDate[dateKey] = (userByDate[dateKey] || 0) + 1;
-    if (userByDate[dateKey] > userBestDay.count) {
-      userBestDay = { date: dateKey, count: userByDate[dateKey] };
-    }
-
-    if (year === currentYear) {
-      annualCount++;
-      userByMonth[monthIndex] = (userByMonth[monthIndex] || 0) + 1;
-    }
-
-    if (monthKey === currentMonthKey) {
-      monthCount++;
-    }
-  });
-
-  const monthlyHistory = [];
-  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  for(let i=0; i<12; i++) {
-    monthlyHistory.push({
-      month: months[i],
-      count: userByMonth[i] || 0
-    });
-  }
-
-  return {
-    store: {
-      totalCalls: allUserHistories.length,
-      busiestDay: storeMaxDay,
-      callsToday: db.dailyStats.count
-    },
-    user: {
-      totalAnnual: annualCount,
-      totalMonth: monthCount,
-      bestDay: userBestDay,
-      monthlyHistory
-    }
-  };
-};
-
+// Load data on startup
 loadData();
-resetDailyStatsIfNeeded();
 
-// Prevent crashes on socket errors (ECONNABORTED, etc.)
-io.engine.on("connection_error", (err) => {
-  // console.log(err.code, err.message); // Silent logger to avoid polluting logs
-});
+// Queue Logic
+const addToHistory = (number, desk) => {
+  if (number === 0) return;
+  
+  const newEntry = {
+    number,
+    desk,
+    timestamp: new Date().toISOString()
+  };
+
+  // Add to start of history
+  queueState.history.unshift(newEntry);
+  
+  // Keep only last 10 entries to prevent infinite growth
+  if (queueState.history.length > 10) {
+    queueState.history = queueState.history.slice(0, 10);
+  }
+};
 
 io.on('connection', (socket) => {
-  socket.emit('init', getPublicState());
+  console.log('Client connected:', socket.id);
 
-  // Robust error handling to prevent server crashes
-  socket.on('error', (err) => {
-    console.error(`Socket error [${socket.id}]:`, err.message);
+  // Send initial state
+  socket.emit('init', queueState);
+
+  // 1. Call Next
+  socket.on('callNext', (desk) => {
+    // Atomic increment in Node's single thread event loop
+    queueState.currentTicket++;
+    queueState.lastCalledDesk = desk;
+    
+    addToHistory(queueState.currentTicket, desk);
+    saveData();
+    
+    // Broadcast to all clients (TVs and Sellers)
+    io.emit('update', queueState);
   });
 
-  socket.on('login', ({ username, password, desk }, callback) => {
-    const user = db.users.find(u => u.username === username && u.password === password);
-    
-    if (!user) {
-      return callback({ success: false, message: 'Credenciais inválidas.' });
-    }
+  // 2. Recall Current (Re-announce)
+  socket.on('recall', () => {
+    // Just re-emit the current state with a specific flag if needed, 
+    // but for now, re-emitting update triggers the UI hooks again
+    io.emit('update', { ...queueState, recall: true });
+  });
 
-    const usedDesks = Array.from(activeDesks.values());
-    if (usedDesks.includes(desk)) {
-      return callback({ success: false, message: `Balcão ${desk} já está em uso por outro operador.` });
+  // 3. Update Manually (Sync physical paper)
+  socket.on('updateNumber', (newNumber) => {
+    const num = parseInt(newNumber, 10);
+    if (!isNaN(num) && num >= 0) {
+      queueState.currentTicket = num;
+      // We do not add to history on manual set, usually, or we can choose to.
+      // Let's NOT add to history to avoid cluttering it with adjustments.
+      saveData();
+      io.emit('update', queueState);
     }
+  });
 
-    activeDesks.set(socket.id, desk);
-    const userData = getUserStats(user.id, desk);
-    callback({ success: true, user: userData });
+  // 4. Revert (Undo last action)
+  socket.on('revert', () => {
+    if (queueState.currentTicket > 0) {
+      queueState.currentTicket--;
+      
+      // Try to find the previous desk from history if it matches the new current number
+      const prevEntry = queueState.history.find(h => h.number === queueState.currentTicket);
+      queueState.lastCalledDesk = prevEntry ? prevEntry.desk : null;
+
+      // Remove the "undone" ticket from history if it's at the top
+      if (queueState.history.length > 0 && queueState.history[0].number === (queueState.currentTicket + 1)) {
+        queueState.history.shift();
+      }
+
+      saveData();
+      io.emit('update', queueState);
+    }
   });
 
   socket.on('disconnect', () => {
-    if (activeDesks.has(socket.id)) {
-      activeDesks.delete(socket.id);
-    }
-  });
-
-  // --- ACTIONS ---
-  
-  socket.on('setMusic', (musicData) => {
-    db.music = { ...db.music, ...musicData };
-    saveData();
-    io.emit('update', getPublicState());
-  });
-
-  socket.on('playerControl', (action) => {
-    // Broadcast the command to all clients (specifically for the TV to hear)
-    io.emit('player_command', action);
-    
-    // Also update server state for play/pause consistency
-    if (action === 'pause') db.music.isPlaying = false;
-    if (action === 'play') db.music.isPlaying = true;
-    saveData();
-  });
-
-  socket.on('getAnalytics', (userId, callback) => {
-    const stats = calculateAnalytics(userId);
-    callback(stats);
-  });
-
-  socket.on('setTicketNumber', (number) => {
-    db.config.currentTicket = number;
-    saveData();
-    io.emit('update', getPublicState());
-  });
-
-  socket.on('callNext', (userId) => {
-    resetDailyStatsIfNeeded();
-    const user = db.users.find(u => u.id === userId);
-    const desk = activeDesks.get(socket.id);
-
-    if (!user || !desk) return;
-
-    const now = Date.now();
-    
-    if (user.lastCallTimestamp) {
-      const durationSeconds = (now - user.lastCallTimestamp) / 1000;
-      if (durationSeconds < 2700) {
-        db.dailyStats.totalDuration += durationSeconds;
-      }
-    }
-
-    db.config.currentTicket++;
-    db.config.lastCalledDesk = desk;
-    db.dailyStats.count++;
-    user.totalCalls++;
-    user.lastCallTimestamp = now;
-    
-    if (!user.history) user.history = [];
-    user.history.unshift({ timestamp: new Date().toISOString(), number: db.config.currentTicket, desk: desk });
-    
-    db.history.unshift({
-      number: db.config.currentTicket,
-      desk: desk,
-      timestamp: new Date().toISOString(),
-      caller: user.name
-    });
-    if (db.history.length > 20) db.history.pop();
-
-    saveData();
-    io.emit('update', getPublicState());
-    socket.emit('user_update', getUserStats(userId, desk));
-  });
-
-  socket.on('callSpecific', ({ number, userId, isRetroactive }) => {
-    resetDailyStatsIfNeeded();
-    const user = db.users.find(u => u.id === userId);
-    const desk = activeDesks.get(socket.id);
-    if (!user || !desk) return;
-    
-    if (!isRetroactive) {
-       db.config.currentTicket = number;
-       db.config.lastCalledDesk = desk;
-       user.lastCallTimestamp = Date.now(); 
-    } else {
-       db.config.lastCalledDesk = desk;
-    }
-
-    const ticketEntry = {
-      number: number,
-      desk: desk,
-      timestamp: new Date().toISOString(),
-      caller: user.name,
-      isRetroactive: !!isRetroactive
-    };
-
-    db.history.unshift(ticketEntry);
-    
-    if (!isRetroactive) {
-       if (!user.history) user.history = [];
-       user.history.unshift(ticketEntry);
-    }
-
-    saveData();
-    io.emit('update', getPublicState());
-    socket.emit('user_update', getUserStats(userId, desk));
-  });
-
-  socket.on('recall', () => {
-    io.emit('update', { ...getPublicState(), recall: true });
-  });
-
-  socket.on('revert', () => {
-     if (db.config.currentTicket > 0) {
-        db.config.currentTicket--;
-        if (db.history.length > 0 && db.history[0].number === db.config.currentTicket + 1) {
-            db.history.shift();
-        }
-        const prev = db.history[0];
-        db.config.lastCalledDesk = prev ? prev.desk : null;
-        
-        saveData();
-        io.emit('update', getPublicState());
-     }
+    console.log('Client disconnected:', socket.id);
   });
 });
 
-// Fallback for SPA routing if building for production
-if (fs.existsSync(distPath)) {
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
-  });
-}
-
 const PORT = process.env.PORT || 3001;
-// Listen on 0.0.0.0 for external access
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
