@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useQueueSocket } from '../hooks/useQueueSocket';
-import { Clock, Cloud, Sun, CloudRain, MapPin, Music } from 'lucide-react';
+import { Clock, Cloud, Music, Wifi, WifiOff } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -38,7 +38,8 @@ const DigitalClock: React.FC = () => {
   );
 };
 
-const MusicPlayer = ({ videoId, isPlaying, volume }: any) => {
+// Componente Player Robusto para TV
+const MusicPlayer = ({ videoId, isPlaying, volume, onPlayerReady }: any) => {
    const playerRef = useRef<any>(null);
 
    useEffect(() => {
@@ -54,35 +55,58 @@ const MusicPlayer = ({ videoId, isPlaying, volume }: any) => {
        if (!window.YT || !videoId) return;
 
        const createPlayer = () => {
-           if (playerRef.current) {
+           // Se já existe, apenas carrega o novo vídeo
+           if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
                 playerRef.current.loadVideoById(videoId);
                 return;
            }
+
+           // Cria nova instância
            playerRef.current = new window.YT.Player('yt-player-frame', {
-               height: '1', width: '1', // Hidden
+               height: '100%', 
+               width: '100%',
+               videoId: videoId,
                playerVars: {
-                   'autoplay': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'rel': 0, 
-                   'showinfo': 0, 'modestbranding': 1, 'mute': 0, 'loop': 1,
-                   'playlist': videoId // Loop single video or playlist
+                   'autoplay': 1, 
+                   'controls': 0, 
+                   'disablekb': 1, 
+                   'fs': 0, 
+                   'rel': 0, 
+                   'showinfo': 0, 
+                   'modestbranding': 1, 
+                   'mute': 0, // Tenta desmutado
+                   'loop': 1,
+                   'playlist': videoId, // Necessário para loop funcionar
+                   'playsinline': 1,
+                   'origin': window.location.origin // Crítico para Localhost/HTTP
                },
                events: {
                    'onReady': (event: any) => {
                        event.target.setVolume(volume);
-                       if(isPlaying) event.target.playVideo();
+                       if (onPlayerReady) onPlayerReady(event.target);
+                       if (isPlaying) event.target.playVideo();
+                   },
+                   'onError': (e: any) => console.error("YouTube Error:", e.data),
+                   'onStateChange': (e: any) => {
+                       // Se terminar (0), toca de novo (loop manual de segurança)
+                       if (e.data === 0) e.target.playVideo();
                    }
                }
            });
        };
+
        if (window.YT && window.YT.Player) createPlayer();
        else window.onYouTubeIframeAPIReady = createPlayer;
    }, [videoId]);
 
+   // Sincronia de Volume
    useEffect(() => {
       if (playerRef.current && typeof playerRef.current.setVolume === 'function') {
           playerRef.current.setVolume(volume);
       }
    }, [volume]);
 
+   // Sincronia de Play/Pause
    useEffect(() => {
        if (playerRef.current && typeof playerRef.current.getPlayerState === 'function') {
            if (isPlaying) playerRef.current.playVideo();
@@ -90,30 +114,58 @@ const MusicPlayer = ({ videoId, isPlaying, volume }: any) => {
        }
    }, [isPlaying]);
 
-   return <div id="yt-player-frame" className="absolute bottom-0 left-0 opacity-0 pointer-events-none w-px h-px"></div>;
+   // O Player fica no Z-Index 0 (Fundo), ocupando toda a tela.
+   // O App fica no Z-Index 10 (Frente) com background sólido.
+   // Isso engana a TV para achar que o usuário está assistindo o vídeo.
+   return (
+      <div className="fixed inset-0 z-0 pointer-events-none opacity-100">
+          <div id="yt-player-frame" className="w-full h-full"></div>
+      </div>
+   );
 };
 
 export const TVDisplay: React.FC = () => {
   const { isConnected, queueState, lastUpdateTimestamp } = useQueueSocket();
   const [highlight, setHighlight] = useState(false);
   const [hasStarted, setHasStarted] = useState(false); 
+  
+  // Refs para controle direto
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const playerInstanceRef = useRef<any>(null); 
 
   useEffect(() => {
-    document.body.style.background = 'radial-gradient(circle at center, #1e293b 0%, #020617 100%)'; // Clean dark gradient
+    // Fundo sólido para cobrir o vídeo do YouTube
+    document.body.style.background = '#020617'; 
     document.body.style.overflow = 'hidden'; 
     return () => { document.body.style.background = ''; };
   }, []);
 
+  // --- STARTUP SEQUENCE (The Click) ---
   const startTVExperience = () => {
       try {
+          // 1. Web Audio API (Ding Dong)
           if (!audioCtxRef.current) {
               const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
               if (AudioCtor) audioCtxRef.current = new AudioCtor();
           }
           if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
+
+          // 2. TTS Unlock (Play silent audio)
+          const silent = new Audio();
+          silent.play().catch(() => {});
+
+          // 3. YouTube Force Play (Crucial for TV/Mobile)
+          if (playerInstanceRef.current && typeof playerInstanceRef.current.playVideo === 'function') {
+              playerInstanceRef.current.unMute();
+              playerInstanceRef.current.setVolume(queueState.music?.volume || 50);
+              playerInstanceRef.current.playVideo();
+          }
+
           setHasStarted(true);
-      } catch (e) { setHasStarted(true); }
+      } catch (e) { 
+          console.error("Start Error", e);
+          setHasStarted(true); 
+      }
   };
 
   const playDingDong = () => {
@@ -124,9 +176,9 @@ export const TVDisplay: React.FC = () => {
       const now = ctx.currentTime;
       const masterGain = ctx.createGain();
       masterGain.connect(ctx.destination);
-      masterGain.gain.value = 1.0; // Alto volume
+      masterGain.gain.value = 1.0; 
 
-      // Ding
+      // Ding (High)
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       osc1.frequency.setValueAtTime(660, now);
@@ -138,7 +190,7 @@ export const TVDisplay: React.FC = () => {
       osc1.start(now);
       osc1.stop(now + 1.2);
 
-      // Dong
+      // Dong (Low)
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.frequency.setValueAtTime(550, now + 0.5);
@@ -149,34 +201,37 @@ export const TVDisplay: React.FC = () => {
       gain2.connect(masterGain);
       osc2.start(now + 0.5);
       osc2.stop(now + 2.0);
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("DingDong Error", e); }
   };
 
-  // TTS FIX: Use Google Translate TTS Endpoint (Returns MP3)
-  // Smart TVs fail with speechSynthesis, but play Audio() tags perfectly.
   const speak = (ticket: number, desk: string) => {
      const text = `Senha ${ticket}, Balcão ${desk}`;
-     const safeText = encodeURIComponent(text);
-     // This API returns an MP3 file
-     const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${safeText}`;
+     // Google Translate TTS (MP3) - Funciona melhor que speechSynthesis em TVs antigas
+     const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${encodeURIComponent(text)}`;
      
      try {
          const audio = new Audio(url);
-         audio.play().catch(e => console.error("TTS Play Blocked", e));
+         audio.playbackRate = 0.9;
+         const playPromise = audio.play();
+         if (playPromise !== undefined) {
+             playPromise.catch(e => console.error("TTS Play Blocked (User interaction needed?):", e));
+         }
      } catch (e) {
-         console.error("Audio creation failed", e);
+         console.error("TTS Error", e);
      }
   };
 
   useEffect(() => {
     if (hasStarted && queueState.currentTicket > 0) {
       setHighlight(true);
+      
+      // Sequência de Anúncio
       playDingDong();
       
-      // Delay speech slightly to not overlap with Ding
+      // Delay pequeno para a voz não atropelar o sino
       setTimeout(() => {
           speak(queueState.currentTicket, queueState.lastCalledDesk || '01');
-      }, 1000);
+      }, 1200);
 
       const timer = setTimeout(() => setHighlight(false), 5000); 
       return () => clearTimeout(timer);
@@ -186,41 +241,46 @@ export const TVDisplay: React.FC = () => {
   return (
     <div className="h-screen w-screen bg-slate-950 text-white overflow-hidden font-sans select-none relative">
       
+      {/* CAMADA 0: PLAYER (Invisível visualmente pois está coberto, mas renderizado para a TV) */}
       <MusicPlayer 
          videoId={queueState.music?.videoId} 
          isPlaying={queueState.music?.isPlaying} 
          volume={queueState.music?.volume || 50}
+         onPlayerReady={(player: any) => { playerInstanceRef.current = player; }}
       />
 
+      {/* CAMADA 9999: OVERLAY DE INÍCIO */}
       {!hasStarted && (
         <div 
           onClick={startTVExperience} 
-          className="absolute inset-0 z-[9999] bg-slate-900/90 flex flex-col items-center justify-center cursor-pointer backdrop-blur-sm"
+          className="absolute inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center cursor-pointer backdrop-blur-md"
         >
-             <div className="w-32 h-32 bg-brand-600 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(37,99,235,0.5)] animate-pulse mb-6">
-                <Music className="w-12 h-12 text-white" />
+             <div className="w-40 h-40 bg-brand-600 rounded-full flex items-center justify-center shadow-[0_0_80px_rgba(37,99,235,0.6)] animate-pulse mb-8 border-4 border-white/20">
+                <Music className="w-16 h-16 text-white" />
              </div>
-             <h1 className="text-4xl font-bold text-white mb-2">Toque para Iniciar</h1>
-             <p className="text-slate-400">Ativa Som e Vídeo</p>
+             <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">TV MODE</h1>
+             <p className="text-slate-300 text-xl font-medium bg-white/10 px-6 py-2 rounded-full border border-white/10">Toque para Iniciar Som e Vídeo</p>
         </div>
       )}
 
-      {/* --- MAIN GRID --- */}
-      <div className="flex h-full p-8 gap-8">
+      {/* CAMADA 10: INTERFACE PRINCIPAL (Cobre o vídeo) */}
+      <div className="relative z-10 w-full h-full bg-slate-950 flex p-8 gap-8">
          
-         {/* LEFT: BIG TICKET (70%) */}
-         <div className="flex-[2] flex flex-col relative bg-slate-900/50 rounded-[3rem] border border-slate-800/50 backdrop-blur-md shadow-2xl overflow-hidden">
+         {/* ESQUERDA: SENHA GIGANTE (70%) */}
+         <div className="flex-[2] flex flex-col relative bg-slate-900 rounded-[3rem] border border-slate-800 shadow-2xl overflow-hidden">
              
-             {/* Info Bar */}
-             <div className="absolute top-8 left-8 flex items-center gap-4 opacity-50">
-                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                 <span className="text-xs uppercase font-bold tracking-widest">Sistema Conectado</span>
+             {/* Barra de Status */}
+             <div className="absolute top-8 left-8 flex items-center gap-4">
+                 <div className={`px-4 py-2 rounded-full flex items-center gap-2 border ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
+                    {isConnected ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+                    <span className="text-xs font-bold uppercase tracking-wider">{isConnected ? 'Online' : 'Offline'}</span>
+                 </div>
              </div>
 
              <div className="flex-1 flex flex-col items-center justify-center w-full">
                  <h2 className="text-slate-500 font-bold text-3xl uppercase tracking-[0.4em] mb-4">Senha Atual</h2>
                  
-                 {/* BIG NUMBER - Sans Serif, Clean Zero */}
+                 {/* NÚMERO GIGANTE */}
                  <div className={`
                      text-[22rem] leading-none font-bold tracking-tighter tabular-nums drop-shadow-2xl transition-all duration-300
                      ${highlight ? 'text-white scale-110' : 'text-slate-200 scale-100'}
@@ -228,31 +288,32 @@ export const TVDisplay: React.FC = () => {
                     {String(queueState.currentTicket).padStart(3, '0')}
                  </div>
 
+                 {/* LOCAL DE ATENDIMENTO */}
                  <div className={`
-                     mt-12 rounded-2xl px-12 py-6 border-2 flex flex-col items-center justify-center transition-all duration-500
+                     mt-12 rounded-2xl px-16 py-8 border-2 flex flex-col items-center justify-center transition-all duration-500
                      ${highlight 
                         ? 'bg-brand-600 border-brand-400 shadow-[0_0_60px_rgba(37,99,235,0.4)] scale-105' 
-                        : 'bg-slate-800/50 border-white/5 text-slate-400'}
+                        : 'bg-slate-800 border-slate-700 text-slate-400'}
                  `}>
-                     <span className="font-bold uppercase tracking-[0.2em] text-sm mb-1 opacity-70">Dirija-se ao</span>
-                     <span className="text-6xl font-bold leading-none">
+                     <span className="font-bold uppercase tracking-[0.2em] text-sm mb-2 opacity-70">Dirija-se ao</span>
+                     <span className="text-7xl font-bold leading-none">
                         {queueState.lastCalledDesk ? `Balcão ${String(queueState.lastCalledDesk).padStart(2, '0')}` : '---'}
                      </span>
                  </div>
              </div>
          </div>
 
-         {/* RIGHT: SIDEBAR (30%) */}
+         {/* DIREITA: SIDEBAR (30%) */}
          <div className="flex-1 flex flex-col gap-6">
              
-             {/* Header Widgets */}
-             <div className="flex justify-between items-center bg-slate-900/50 rounded-3xl p-6 border border-white/5 shadow-lg">
+             {/* Widgets */}
+             <div className="flex justify-between items-center bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-lg">
                  <WeatherWidget />
                  <DigitalClock />
              </div>
 
-             {/* History List */}
-             <div className="flex-1 bg-slate-900/50 rounded-3xl border border-white/5 shadow-lg flex flex-col overflow-hidden p-6 relative">
+             {/* Histórico */}
+             <div className="flex-1 bg-slate-900 rounded-3xl border border-slate-800 shadow-lg flex flex-col overflow-hidden p-6 relative">
                  <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
                     <Clock className="w-5 h-5 text-slate-400" />
                     <span className="text-slate-400 font-bold uppercase tracking-widest text-xs">Histórico Recente</span>
@@ -264,7 +325,7 @@ export const TVDisplay: React.FC = () => {
                           flex items-center justify-between p-5 rounded-2xl border transition-all duration-500
                           ${i === 0 && highlight 
                              ? 'bg-brand-500/20 border-brand-500/50 scale-105 z-10' 
-                             : 'bg-black/20 border-white/5'}
+                             : 'bg-white/5 border-white/5'}
                        `}>
                           <span className={`text-5xl font-sans font-bold tracking-tight ${i === 0 && highlight ? 'text-white' : 'text-slate-500'}`}>
                              {String(t.number).padStart(3, '0')}
@@ -278,13 +339,13 @@ export const TVDisplay: React.FC = () => {
                     ))}
                  </div>
 
-                 {/* Music Info at Bottom */}
+                 {/* Info da Música (Rodapé do Histórico) */}
                  {queueState.music?.isPlaying && (
-                     <div className="absolute bottom-0 left-0 w-full p-4 bg-black/40 backdrop-blur-md border-t border-white/5 flex items-center gap-3">
-                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                     <div className="mt-4 pt-4 border-t border-white/5 flex items-center gap-3">
+                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></div>
                          <div className="overflow-hidden">
-                            <p className="text-xs text-slate-400 uppercase font-bold">Rádio Loja</p>
-                            <p className="text-sm font-bold text-white truncate">{queueState.music.title || 'Música Ambiente'}</p>
+                            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Rádio Ativa</p>
+                            <p className="text-sm font-bold text-slate-300 truncate">{queueState.music.title || 'Música Ambiente'}</p>
                          </div>
                      </div>
                  )}
