@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Queue Master Pro</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <script type="importmap">
@@ -26,40 +26,19 @@
   }
 }
 </script>
+<style>
+  body, html {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden; /* Critical for TV */
+    background-color: #000;
+  }
+</style>
 </head>
   <body>
-    <div id="tv-debug-layer"></div>
     <div id="root"></div>
-    
-    <!-- TV Compatibility Error Handler -->
-    <script>
-      window.onerror = function(message, source, lineno, colno, error) {
-        // Ignora erros genéricos de script cross-origin (comuns em TVs com CDNs)
-        if (typeof message === 'string' && message.indexOf('Script error') !== -1) {
-            return false;
-        }
-
-        const debug = document.getElementById('tv-debug-layer');
-        if (debug) {
-          debug.style.display = 'block';
-          // Limpa mensagens antigas para não cobrir a tela inteira
-          if (debug.innerHTML.length > 500) debug.innerHTML = '';
-          debug.innerHTML += `[ERROR] ${message} \nAt: ${source}:${lineno}\n\n`;
-        }
-      };
-
-      window.onunhandledrejection = function(event) {
-        const debug = document.getElementById('tv-debug-layer');
-        if (debug) {
-          // Ignora erros de redimensionamento comuns em layouts responsivos
-          if (event.reason && String(event.reason).includes('ResizeObserver')) return;
-
-          debug.style.display = 'block';
-          debug.innerHTML += `[PROMISE] ${event.reason}\n\n`;
-        }
-      };
-    </script>
-
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
