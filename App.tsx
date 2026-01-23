@@ -1,33 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { SellerDashboard } from './components/SellerDashboard';
 import { TVDisplay } from './components/TVDisplay';
-import { Users, MonitorPlay } from 'lucide-react';
+import { Users, MonitorPlay, ArrowLeft } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [route, setRoute] = useState<string>('');
+  const [currentView, setCurrentView] = useState<'home' | 'display' | 'vendedor'>('home');
 
-  useEffect(() => {
-    // Simple hash routing
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '');
-      setRoute(hash);
-    };
+  // Helper to go back to home (passed as prop if needed, or used in wrapper)
+  const goHome = () => setCurrentView('home');
 
-    // Set initial
-    handleHashChange();
-
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
-
-  // Route: Display
-  if (route === 'display') {
-    return <TVDisplay />;
+  if (currentView === 'display') {
+    return (
+      <div className="relative">
+        {/* Hidden back button area for demo purposes - top left corner */}
+        <div 
+            onClick={goHome} 
+            className="fixed top-0 left-0 w-16 h-16 z-50 cursor-pointer opacity-0 hover:opacity-20 bg-white"
+            title="Voltar ao Menu"
+        ></div>
+        <TVDisplay />
+      </div>
+    );
   }
 
-  // Route: Seller
-  if (route === 'vendedor') {
-    return <SellerDashboard />;
+  if (currentView === 'vendedor') {
+    return (
+      <div className="relative">
+        <button 
+          onClick={goHome}
+          className="fixed top-4 left-4 z-50 bg-gray-800 p-2 rounded-full text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shadow-lg border border-gray-700"
+          title="Voltar ao Menu"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <SellerDashboard />
+      </div>
+    );
   }
 
   // Landing Page (Selection)
@@ -40,7 +48,10 @@ const App: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          <a href="#vendedor" className="group block">
+          <button 
+            onClick={() => setCurrentView('vendedor')}
+            className="group block w-full text-left"
+          >
             <div className="bg-gray-900 hover:bg-indigo-900/20 border border-gray-800 hover:border-indigo-500/50 p-6 rounded-2xl transition-all flex items-center gap-6">
               <div className="bg-indigo-600 p-4 rounded-xl group-hover:scale-110 transition-transform shadow-lg shadow-indigo-500/20">
                 <Users className="w-8 h-8 text-white" />
@@ -50,9 +61,12 @@ const App: React.FC = () => {
                 <p className="text-sm text-gray-500">Controle de chamadas e ajustes</p>
               </div>
             </div>
-          </a>
+          </button>
 
-          <a href="#display" className="group block">
+          <button 
+            onClick={() => setCurrentView('display')}
+            className="group block w-full text-left"
+          >
             <div className="bg-gray-900 hover:bg-emerald-900/20 border border-gray-800 hover:border-emerald-500/50 p-6 rounded-2xl transition-all flex items-center gap-6">
               <div className="bg-emerald-600 p-4 rounded-xl group-hover:scale-110 transition-transform shadow-lg shadow-emerald-500/20">
                 <MonitorPlay className="w-8 h-8 text-white" />
@@ -62,7 +76,7 @@ const App: React.FC = () => {
                 <p className="text-sm text-gray-500">Modo de exibição pública (Som + Voz)</p>
               </div>
             </div>
-          </a>
+          </button>
         </div>
         
         <p className="text-xs text-gray-700 pt-8">

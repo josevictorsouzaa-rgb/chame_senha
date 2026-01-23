@@ -2,8 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { QueueState } from '../types';
 
-// Default to localhost:3001 for development if no env var
-// In production, this would be your backend URL
+// Default to localhost:3001
 const SERVER_URL = 'http://localhost:3001';
 
 export const useQueueSocket = () => {
@@ -14,58 +13,100 @@ export const useQueueSocket = () => {
     history: [],
   });
   
-  // Use a ref to keep track of whether we had a recall event
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number>(0);
-
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    // Initialize socket
-    socketRef.current = io(SERVER_URL, {
-      transports: ['websocket', 'polling'], // Robustness
-    });
+    // Check for Mixed Content issues (HTTPS trying to hit HTTP)
+    if (window.location.protocol === 'https:' && SERVER_URL.startsWith('http:')) {
+      console.warn("Attempting to connect to insecure WebSocket (http) from secure origin (https). This may be blocked by the browser.");
+    }
 
-    const socket = socketRef.current;
+    try {
+        socketRef.current = io(SERVER_URL, {
+            transports: ['websocket', 'polling'],
+            reconnectionAttempts: 5,
+        });
 
-    socket.on('connect', () => {
-      console.log('Connected to Queue Server');
-      setIsConnected(true);
-    });
+        const socket = socketRef.current;
 
-    socket.on('disconnect', () => {
-      console.log('Disconnected from Queue Server');
-      setIsConnected(false);
-    });
+        socket.on('connect', () => {
+            console.log('Socket connected successfully');
+            setIsConnected(true);
+        });
 
-    socket.on('init', (data: QueueState) => {
-      setQueueState(data);
-    });
+        socket.on('connect_error', (err) => {
+            // Silently fail after some logs, let the UI handle offline state
+            console.debug('Socket connection error:', err.message);
+            setIsConnected(false);
+        });
 
-    socket.on('update', (data: QueueState & { recall?: boolean }) => {
-      setQueueState(data);
-      // Trigger a visual/audio effect by updating a timestamp
-      setLastUpdateTimestamp(Date.now());
-    });
+        socket.on('disconnect', () => {
+            setIsConnected(false);
+        });
+
+        socket.on('init', (data: QueueState) => {
+            setQueueState(data);
+        });
+
+        socket.on('update', (data: QueueState & { recall?: boolean }) => {
+            setQueueState(data);
+            setLastUpdateTimestamp(Date.now());
+        });
+
+    } catch (error) {
+        console.error("Socket initialization failed completely:", error);
+    }
 
     return () => {
-      socket.disconnect();
+      socketRef.current?.disconnect();
     };
   }, []);
 
+  // --- Actions ---
+  // In a real app, these emit to server. 
+  // If we are "offline"/demo mode, we could simulate them locally, 
+  // but for now we just try to emit. The TVDisplay component handles the Demo UI state manually if needed.
+  
   const callNext = useCallback((desk: string) => {
-    socketRef.current?.emit('callNext', desk);
+    if (socketRef.current?.connected) {
+        socketRef.current.emit('callNext', desk);
+    } else {
+        // Fallback Simulation for Demo Mode
+        setQueueState(prev => {
+            const next = (prev.currentTicket || 0) + 1;
+            const history = [{ number: next, desk, timestamp: new Date().toISOString() }, ...prev.history].slice(0, 5);
+            return { ...prev, currentTicket: next, lastCalledDesk: desk, history };
+        });
+        setLastUpdateTimestamp(Date.now());
+    }
   }, []);
 
   const recallCurrent = useCallback(() => {
-    socketRef.current?.emit('recall');
+    if (socketRef.current?.connected) {
+        socketRef.current.emit('recall');
+    } else {
+         // Simulation
+         setLastUpdateTimestamp(Date.now());
+    }
   }, []);
 
   const updateNumber = useCallback((newNumber: number) => {
-    socketRef.current?.emit('updateNumber', newNumber);
+    if (socketRef.current?.connected) {
+        socketRef.current.emit('updateNumber', newNumber);
+    } else {
+        // Simulation
+        setQueueState(prev => ({ ...prev, currentTicket: newNumber }));
+    }
   }, []);
 
   const revertPrevious = useCallback(() => {
-    socketRef.current?.emit('revert');
+    if (socketRef.current?.connected) {
+        socketRef.current.emit('revert');
+    } else {
+        // Simulation
+        setQueueState(prev => ({ ...prev, currentTicket: Math.max(0, (prev.currentTicket || 0) - 1) }));
+    }
   }, []);
 
   return {
