@@ -2,12 +2,12 @@ export interface User {
   id: string;
   username: string;
   name: string;
-  desk: string; // Now dynamic based on login selection
-  totalCalls: number; // Lifetime
+  desk: string; 
+  totalCalls: number; 
   stats: {
     today: number;
     month: number;
-    lastCallTime: number | null; // Timestamp
+    lastCallTime: number | null; 
   };
 }
 
@@ -15,8 +15,17 @@ export interface Ticket {
   number: number;
   desk: string; 
   timestamp: string;
-  caller?: string; // Name of the seller
-  isRetroactive?: boolean; // If true, visual distinction on TV
+  caller?: string; 
+  isRetroactive?: boolean; 
+}
+
+export interface MusicState {
+  videoId: string | null;
+  playlistId?: string | null;
+  title: string;
+  thumbnail: string;
+  isPlaying: boolean;
+  volume: number;
 }
 
 export interface QueueState {
@@ -25,8 +34,9 @@ export interface QueueState {
   history: Ticket[];
   stats: {
     totalCallsToday: number;
-    averageServiceTime: number; // in seconds
+    averageServiceTime: number; 
   };
+  music: MusicState; // Added Music State
 }
 
 export interface AuthResponse {
@@ -41,18 +51,17 @@ export interface LoginPayload {
   desk: string;
 }
 
-// New Analytics Interface
 export interface AnalyticsData {
   store: {
-    totalCalls: number; // All time in DB
+    totalCalls: number; 
     busiestDay: { date: string; count: number };
     callsToday: number;
   };
   user: {
-    totalAnnual: number; // Current Year
-    totalMonth: number; // Current Month
+    totalAnnual: number; 
+    totalMonth: number; 
     bestDay: { date: string; count: number };
-    monthlyHistory: { month: string; count: number }[]; // For Chart
+    monthlyHistory: { month: string; count: number }[]; 
   };
 }
 
@@ -62,8 +71,9 @@ export interface ClientEvents {
   'callSpecific': (payload: { number: number; userId: string; isRetroactive: boolean }) => void;
   'recall': () => void;
   'revert': () => void;
-  'setTicketNumber': (number: number) => void; // New: Manual sync
+  'setTicketNumber': (number: number) => void; 
   'getAnalytics': (userId: string, callback: (data: AnalyticsData) => void) => void;
+  'setMusic': (music: Partial<MusicState>) => void; // New Event
 }
 
 export interface SocketEvents {
