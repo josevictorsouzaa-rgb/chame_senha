@@ -34,13 +34,12 @@ let db = {
     currentTicket: 0,
     lastCalledDesk: null,
   },
-  // Default music state
+  // Default music state - Lofi Girl (Reliable ID)
   music: {
-    videoId: null,
-    playlistId: null,
-    title: '',
-    thumbnail: '',
-    isPlaying: false,
+    videoId: 'jfKfPfyJRdk', 
+    title: 'Lofi Girl - Relaxing Beats',
+    thumbnail: 'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
+    isPlaying: true,
     volume: 50
   },
   users: [

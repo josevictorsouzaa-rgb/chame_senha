@@ -23,7 +23,7 @@ const ConnectionStatus = ({ isConnected }: { isConnected: boolean }) => (
   <div className="fixed top-6 right-6 flex items-center gap-3 px-4 py-2 bg-black/40 backdrop-blur-sm rounded-full border border-white/10 z-50">
      <div className={`w-3 h-3 rounded-full shadow-[0_0_8px_currentColor] ${isConnected ? 'bg-green-500 text-green-500' : 'bg-red-500 text-red-500 animate-pulse'}`}></div>
      <span className={`text-[1.5vh] font-bold uppercase tracking-wider ${isConnected ? 'text-slate-300' : 'text-red-400'}`}>
-        {isConnected ? 'Sistema Online' : 'Reconectando...'}
+        {isConnected ? 'ONLINE' : 'OFFLINE'}
      </span>
      {isConnected ? <Wifi className="w-4 h-4 text-slate-400" /> : <WifiOff className="w-4 h-4 text-red-400" />}
   </div>
@@ -64,15 +64,15 @@ const WeatherWidget: React.FC = () => {
   const currentCode = weather.current.weather_code;
 
   return (
-    <div className="flex items-center gap-4 bg-black/20 px-4 py-2 rounded-xl border border-white/5 h-full justify-center">
+    <div className="flex items-center gap-4 bg-black/20 px-6 py-4 rounded-xl border border-white/5 h-full justify-center">
         <div className="animate-pulse-slow drop-shadow-lg">
-           {getWeatherIcon(currentCode, "w-12 h-12")}
+           {getWeatherIcon(currentCode, "w-16 h-16")}
         </div>
         <div className="flex flex-col">
-            <span className="text-4xl font-bold text-white tracking-tighter leading-none drop-shadow-md">{currentTemp}°</span>
+            <span className="text-5xl font-bold text-white tracking-tighter leading-none drop-shadow-md">{currentTemp}°</span>
             <div className="flex items-center gap-1 mt-1 text-slate-400">
                <MapPin className="w-3 h-3" />
-               <span className="text-[10px] font-bold uppercase tracking-widest">Piracicaba</span>
+               <span className="text-[12px] font-bold uppercase tracking-widest">Piracicaba</span>
             </div>
         </div>
     </div>
@@ -88,12 +88,12 @@ const DigitalClock: React.FC = () => {
 
   return (
     <div className="flex flex-col items-center justify-center h-full">
-          <div className="text-[6vh] font-mono font-bold text-white tracking-tight leading-none tabular-nums drop-shadow-lg">
+          <div className="text-[7vh] font-mono font-bold text-white tracking-tight leading-none tabular-nums drop-shadow-lg">
             {time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
           </div>
-          <div className="flex items-center justify-center gap-2 mt-1 text-yellow-500">
-            <CalendarDays className="w-4 h-4" />
-            <div className="text-[1.5vh] font-bold uppercase tracking-[0.1em]">
+          <div className="flex items-center justify-center gap-2 mt-2 text-yellow-500">
+            <CalendarDays className="w-5 h-5" />
+            <div className="text-[1.8vh] font-bold uppercase tracking-[0.1em]">
                 {time.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
             </div>
           </div>
@@ -101,14 +101,11 @@ const DigitalClock: React.FC = () => {
   );
 };
 
-// --- YOUTUBE PLAYER ---
+// --- SIMPLIFIED SINGLE VIDEO LOOP PLAYER ---
 const MusicPlayer = ({ 
     videoId, 
-    playlistId,
     isPlaying, 
     volume, 
-    ducking, 
-    command,
     onPlayerReady 
 }: any) => {
    const playerRef = useRef<any>(null);
@@ -123,12 +120,12 @@ const MusicPlayer = ({
    }, []);
 
    useEffect(() => {
-       if (!window.YT || (!videoId && !playlistId)) return;
+       if (!window.YT || !videoId) return;
 
        const createPlayer = () => {
            if (playerRef.current) {
-                if (playlistId) playerRef.current.loadPlaylist({ listType: 'playlist', list: playlistId });
-                else if (videoId) playerRef.current.loadVideoById(videoId);
+                // If player exists, just load new video
+                playerRef.current.loadVideoById(videoId);
                 return;
            }
 
@@ -140,25 +137,20 @@ const MusicPlayer = ({
                    'disablekb': 1,
                    'fs': 0, 
                    'rel': 0, 
-                   'mute': 1, 
-                   'loop': 1,
+                   'mute': 1, // Start muted to appease TV browser
+                   'loop': 1, // Loop enabled
+                   'playlist': videoId, // REQUIRED: Playlist param with same ID makes loop work for single video
                    'playsinline': 1, 
                    'origin': window.location.origin, 
                    'widget_referrer': window.location.origin,
-                   'host': 'http://www.youtube.com', // Hint for HTTP envs
                    'enablejsapi': 1
                },
                events: {
                    'onReady': (event: any) => {
                        onPlayerReady(event.target);
-                       // Wait for user interaction to unmute
-                   },
-                   'onStateChange': (event: any) => {
-                        if (event.data === 0 && playlistId) event.target.nextVideo();
                    },
                    'onError': (event: any) => {
                        console.log("YT Error", event.data);
-                       if (playlistId) event.target.nextVideo();
                    }
                }
            });
@@ -167,34 +159,31 @@ const MusicPlayer = ({
        if (window.YT && window.YT.Player) createPlayer();
        else window.onYouTubeIframeAPIReady = createPlayer;
 
-   }, [videoId, playlistId]);
+   }, [videoId]);
 
+   // Volume Sync
    useEffect(() => {
-       if (!playerRef.current || !command) return;
-       const player = playerRef.current;
-       if (typeof player.playVideo !== 'function') return;
-       switch(command.action) {
-           case 'play': player.playVideo(); break;
-           case 'pause': player.pauseVideo(); break;
-           case 'next': player.nextVideo(); break;
-           case 'prev': player.previousVideo(); break;
+      if (playerRef.current && typeof playerRef.current.setVolume === 'function') {
+          playerRef.current.setVolume(volume);
+      }
+   }, [volume]);
+
+   // Play/Pause Sync
+   useEffect(() => {
+       if (playerRef.current && typeof playerRef.current.playVideo === 'function') {
+           if (isPlaying) playerRef.current.playVideo();
+           else playerRef.current.pauseVideo();
        }
-   }, [command]);
+   }, [isPlaying]);
 
-   useEffect(() => {
-      if (!playerRef.current || typeof playerRef.current.setVolume !== 'function') return;
-      const targetVolume = ducking ? 10 : volume; 
-      playerRef.current.setVolume(targetVolume);
-   }, [ducking, volume]);
-
-   return <div id="yt-player-frame" className="absolute opacity-0 pointer-events-none"></div>;
+   return <div id="yt-player-frame" className="absolute opacity-0 pointer-events-none" style={{ top: -1000, left: -1000 }}></div>;
 };
 
 const NowPlayingWidget = ({ music }: { music: any }) => {
-   if ((!music.videoId && !music.playlistId) || !music.isPlaying) return (
+   if (!music.videoId || !music.isPlaying) return (
        <div className="h-full bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4 flex items-center justify-center gap-2 text-slate-500">
            <Music className="w-5 h-5" />
-           <span className="text-xs font-bold uppercase tracking-wider">Rádio Lubel</span>
+           <span className="text-xs font-bold uppercase tracking-wider">Rádio Lubel (Pausado)</span>
        </div>
    );
 
@@ -205,7 +194,7 @@ const NowPlayingWidget = ({ music }: { music: any }) => {
          </div>
          <div className="flex-1 min-w-0 z-10">
              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] font-bold text-yellow-400 uppercase tracking-widest">No Ar</span>
+                <span className="text-[10px] font-bold text-yellow-400 uppercase tracking-widest">Tocando Agora</span>
                 <div className="flex gap-0.5 items-end h-3">
                     <span className="w-1 h-3 bg-green-500 animate-[pulse_0.6s_ease-in-out_infinite]"></span>
                     <span className="w-1 h-2 bg-green-500 animate-[pulse_0.8s_ease-in-out_infinite]"></span>
@@ -219,14 +208,13 @@ const NowPlayingWidget = ({ music }: { music: any }) => {
 };
 
 export const TVDisplay: React.FC = () => {
-  const { isConnected, queueState, lastUpdateTimestamp, playerCommand } = useQueueSocket();
+  const { isConnected, queueState, lastUpdateTimestamp } = useQueueSocket();
   const [highlight, setHighlight] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false); // Restore start state
+  const [hasStarted, setHasStarted] = useState(false); 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const playerApiRef = useRef<any>(null); 
   const lastPlayedTicketRef = useRef(0);
   
-  // Use ref to access current queue state inside event listeners without stale closures
   const queueRef = useRef(queueState);
   useEffect(() => { queueRef.current = queueState; }, [queueState]);
 
@@ -236,10 +224,10 @@ export const TVDisplay: React.FC = () => {
     return () => { document.body.style.background = ''; };
   }, []);
 
-  // MANUAL START FUNCTION - Crucial for TV/HTTP
-  const initAudioSystem = () => {
+  // --- MANUAL START (Fixes TV Audio) ---
+  const startTVExperience = () => {
       try {
-          // 1. Init AudioContext (Ding Dong)
+          // 1. AudioContext
           if (!audioCtxRef.current) {
               const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
               if (AudioCtor) audioCtxRef.current = new AudioCtor();
@@ -247,27 +235,16 @@ export const TVDisplay: React.FC = () => {
           const ctx = audioCtxRef.current;
           if (ctx && ctx.state === 'suspended') ctx.resume();
 
-          // 2. Unlock YouTube Player
+          // 2. YouTube
           const player = playerApiRef.current;
-          const currentMusic = queueRef.current.music;
-
           if (player && typeof player.unMute === 'function') {
-              console.log("Unlocking TV Audio...");
               player.unMute();
-              player.setVolume(currentMusic.volume || 50);
-
-              // Force play if something is queued
-              if (currentMusic.isPlaying) {
-                  if (currentMusic.playlistId) {
-                      player.loadPlaylist({ listType: 'playlist', list: currentMusic.playlistId });
-                  } else if (currentMusic.videoId) {
-                      player.playVideo();
-                  }
-              }
+              player.setVolume(queueRef.current.music.volume || 50);
+              player.playVideo(); // Force play
           }
           setHasStarted(true);
       } catch (e) {
-          console.error("Audio Start Error", e);
+          console.error("TV Start Error", e);
           setHasStarted(true);
       }
   };
@@ -275,10 +252,8 @@ export const TVDisplay: React.FC = () => {
   const playDingDong = () => {
     try {
       const ctx = audioCtxRef.current;
-      if (!ctx || ctx.state !== 'running') {
-         if(ctx) ctx.resume();
-      }
       if (!ctx) return;
+      if(ctx.state === 'suspended') ctx.resume();
 
       const now = ctx.currentTime;
       const masterGain = ctx.createGain();
@@ -342,47 +317,46 @@ export const TVDisplay: React.FC = () => {
   }, [lastUpdateTimestamp, queueState.currentTicket, (queueState as any).recall, hasStarted]);
 
   return (
-    <div className="h-screen w-screen bg-slate-950 text-white flex overflow-hidden font-sans relative select-none">
+    <div className="h-screen w-screen bg-slate-950 text-white overflow-hidden font-sans relative select-none">
       
       <MusicPlayer 
          videoId={queueState.music?.videoId} 
-         playlistId={queueState.music?.playlistId}
          isPlaying={queueState.music?.isPlaying} 
          volume={queueState.music?.volume || 50}
-         ducking={highlight} 
-         command={playerCommand}
          onPlayerReady={(player) => { playerApiRef.current = player; }}
       />
 
-      {/* START OVERLAY - MANDATORY FOR TV COMPATIBILITY */}
+      {/* OVERLAY DE INÍCIO - OBRIGATÓRIO PARA TV */}
       {!hasStarted && (
         <div 
-          onClick={initAudioSystem} 
-          className="absolute inset-0 z-50 bg-slate-950/95 flex items-center justify-center cursor-pointer overflow-hidden animate-in fade-in duration-500 backdrop-blur-sm"
+          onClick={startTVExperience} 
+          className="absolute inset-0 z-[999] bg-slate-950/90 flex flex-col items-center justify-center cursor-pointer backdrop-blur-md"
         >
-            <div className="z-10 text-center">
-                <div className="w-24 h-24 bg-lubel-primary rounded-full mx-auto flex items-center justify-center shadow-lg border-4 border-yellow-500 animate-pulse mb-6">
-                    <Music className="w-10 h-10 text-white" />
-                </div>
-                <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">AutoParts TV</h1>
-                <p className="text-yellow-400 text-sm font-bold uppercase tracking-widest bg-yellow-400/10 px-4 py-2 rounded-full border border-yellow-400/20">Toque para iniciar Áudio e Vídeo</p>
-            </div>
+             <div className="w-32 h-32 bg-lubel-primary rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(59,130,246,0.5)] border-4 border-yellow-500 animate-pulse mb-8">
+                <Music className="w-12 h-12 text-white" />
+             </div>
+             <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">AutoParts TV</h1>
+             <p className="text-yellow-400 text-xl font-bold uppercase tracking-[0.2em] bg-yellow-900/30 px-6 py-3 rounded-full border border-yellow-500/50">
+               Toque para Iniciar Som e Vídeo
+             </p>
         </div>
       )}
 
       <ConnectionStatus isConnected={isConnected} />
 
-      {/* MAIN CONTENT - FIXED PADDING FOR BOTTOM TICKER */}
-      <div className={`absolute inset-0 z-10 grid grid-cols-12 gap-6 p-8 pb-24 transition-opacity duration-1000 ${hasStarted ? 'opacity-100' : 'opacity-0'}`}>
+      {/* --- LAYOUT FLEXBOX (FIX PARA TV) --- */}
+      {/* Adicionado padding grande (p-10) e gap grande (gap-10) para evitar que elementos se toquem */}
+      <div className={`w-full h-full flex flex-row p-12 pb-24 gap-12 transition-opacity duration-1000 ${hasStarted ? 'opacity-100' : 'opacity-0'}`}>
          
-         {/* LEFT: MAIN TICKET DISPLAY */}
-         <div className="col-span-7 flex flex-col items-center justify-center relative bg-slate-900/20 rounded-[3rem] border border-slate-800/50">
+         {/* ESQUERDA: SENHA (65% largura) */}
+         <div className="w-[65%] flex flex-col items-center justify-center relative bg-slate-900/40 rounded-[3rem] border border-slate-800/50 backdrop-blur-sm shadow-2xl">
              
-             <div className="flex flex-col items-center w-full scale-95">
+             <div className="flex flex-col items-center w-full">
                  <h2 className="text-slate-500 font-bold text-[3vh] uppercase tracking-[0.4em] mb-[2vh]">Senha Atual</h2>
                  
+                 {/* Fonte reduzida de 40vh para 35vh para dar respiro */}
                  <div className={`
-                     text-[40vh] leading-none font-bold tracking-tighter tabular-nums drop-shadow-2xl transition-all duration-300
+                     text-[35vh] leading-none font-bold tracking-tighter tabular-nums drop-shadow-2xl transition-all duration-300
                      ${highlight 
                         ? 'text-white scale-110 animate-pop-blue' 
                         : 'text-[#f1f5f9] scale-100'}
@@ -391,7 +365,7 @@ export const TVDisplay: React.FC = () => {
                  </div>
 
                  <div className={`
-                     mt-[4vh] rounded-3xl w-[85%] py-[3vh] border-2 flex flex-col items-center gap-1 transition-all duration-500 shadow-2xl
+                     mt-[4vh] rounded-3xl w-[85%] py-[3vh] border-2 flex flex-col items-center gap-1 transition-all duration-500 shadow-xl
                      ${highlight 
                         ? 'bg-yellow-500 text-blue-950 border-yellow-400 scale-105' 
                         : 'bg-lubel-primary border-white/10 text-white'}
@@ -404,44 +378,44 @@ export const TVDisplay: React.FC = () => {
              </div>
          </div>
 
-         {/* RIGHT: SIDEBAR */}
-         <div className="col-span-5 flex flex-col h-full gap-6">
+         {/* DIREITA: SIDEBAR (35% largura) */}
+         <div className="w-[35%] flex flex-col h-full gap-8">
              
-             {/* CLOCK & WEATHER */}
-             <div className="h-[20%] flex overflow-hidden bg-lubel-surface/80 rounded-2xl border border-white/5 shadow-card">
+             {/* RELÓGIO E CLIMA - Container fixo 20% altura */}
+             <div className="h-[20%] flex overflow-hidden bg-lubel-surface/80 rounded-3xl border border-white/5 shadow-card">
                 <div className="flex-1 border-r border-white/5"><DigitalClock /></div>
                 <div className="flex-1"><WeatherWidget /></div>
              </div>
 
-             {/* HISTORY */}
+             {/* HISTÓRICO - Flex Grow */}
              <div className="flex-1 bg-lubel-surface/80 rounded-3xl border border-white/5 shadow-card flex flex-col overflow-hidden p-6 relative">
                  <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/10">
-                    <Clock className="w-5 h-5 text-yellow-500" />
+                    <Clock className="w-6 h-6 text-yellow-500" />
                     <span className="text-slate-400 font-bold uppercase tracking-widest text-sm">Últimas Chamadas</span>
                  </div>
 
-                 <div className="flex-1 flex flex-col gap-4">
+                 <div className="flex-1 flex flex-col gap-4 overflow-hidden">
                     {queueState.history.slice(0, 5).map((t, i) => {
                        const opacity = i === 0 ? 1 : Math.max(0.2, 0.6 - (i * 0.15));
                        const isRetroactive = t.isRetroactive;
                        
                        return (
                           <div key={i} style={{ opacity }} className={`
-                             flex items-center justify-between p-4 rounded-2xl border transition-all duration-500 relative overflow-hidden group
+                             flex items-center justify-between p-4 rounded-2xl border transition-all duration-500 relative overflow-hidden
                              ${i === 0 && highlight 
-                                ? 'bg-yellow-500/10 border-yellow-500/50 scale-105 z-10' 
+                                ? 'bg-yellow-500/10 border-yellow-500/50 scale-105 z-10 shadow-lg' 
                                 : 'bg-black/20 border-white/5'}
                           `}>
                              {isRetroactive && (
                                  <div className="absolute right-0 top-0 p-1">
-                                    <div className="bg-red-500 text-white text-[8px] font-bold px-1.5 rounded uppercase">Rechamada</div>
+                                    <div className="bg-red-500 text-white text-[9px] font-bold px-1.5 rounded uppercase">Rechamada</div>
                                  </div>
                              )}
-                             <span className={`text-4xl font-mono font-bold tracking-tighter drop-shadow-md ${i === 0 && highlight ? 'text-yellow-400' : 'text-slate-200'}`}>
+                             <span className={`text-5xl font-mono font-bold tracking-tighter drop-shadow-md ${i === 0 && highlight ? 'text-yellow-400' : 'text-slate-200'}`}>
                                 {String(t.number).padStart(3, '0')}
                              </span>
                              <div className="text-right">
-                                <span className={`text-xl font-bold ${i === 0 && highlight ? 'text-white' : 'text-slate-500'}`}>
+                                <span className={`text-2xl font-bold ${i === 0 && highlight ? 'text-white' : 'text-slate-500'}`}>
                                    Balcão {String(t.desk).padStart(2, '0')}
                                 </span>
                              </div>
@@ -451,8 +425,8 @@ export const TVDisplay: React.FC = () => {
                  </div>
              </div>
 
-             {/* MUSIC WIDGET */}
-             <div className="h-[12%] min-h-[90px]">
+             {/* MUSIC WIDGET - Altura Fixa */}
+             <div className="h-[12%] min-h-[100px]">
                  <NowPlayingWidget music={queueState.music} />
              </div>
 

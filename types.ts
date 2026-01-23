@@ -21,13 +21,12 @@ export interface Ticket {
 }
 
 export interface MusicState {
-  videoId: string | null; // Used for single video OR fallback
-  playlistId: string | null; // New: Supports playlists
+  videoId: string | null; // Single video ID
   title: string;
   thumbnail: string;
   isPlaying: boolean;
   volume: number; // 0-100
-  lastCommand?: { type: 'next' | 'prev' | 'pause' | 'play', timestamp: number }; // For remote control
+  // Removed playlistId and complex history for stability
 }
 
 export interface QueueState {

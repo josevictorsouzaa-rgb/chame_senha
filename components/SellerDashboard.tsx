@@ -79,46 +79,36 @@ const ConfigModal = ({ isOpen, onClose, onConfirm, current }: any) => {
   );
 };
 
-// --- MUSIC PLAYER COMPONENT ---
+// --- MUSIC PLAYER COMPONENT (SIMPLIFIED) ---
 const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
    const [url, setUrl] = useState('');
    const [loading, setLoading] = useState(false);
 
-   const extractIds = (link: string) => {
+   const extractId = (link: string) => {
       const vidReg = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-      const listReg = /[?&]list=([^#&?]+)/;
-      
       const vidMatch = link.match(vidReg);
-      const listMatch = link.match(listReg);
-
-      return {
-          videoId: (vidMatch && vidMatch[2].length === 11) ? vidMatch[2] : null,
-          playlistId: listMatch ? listMatch[1] : null
-      };
+      return (vidMatch && vidMatch[2].length === 11) ? vidMatch[2] : null;
    };
 
    const handlePlay = async () => {
-      const { videoId, playlistId } = extractIds(url);
-      if (!videoId && !playlistId) return;
+      const videoId = extractId(url);
+      if (!videoId) return;
       
       setLoading(true);
       try {
-         // If it's a playlist, we might not get thumbnail easily via noembed without a specific video ID
-         // If we have videoId, fetch that. If only playlist, generic thumbnail.
-         let title = 'Playlist Carregada';
-         let thumbnail = 'https://img.youtube.com/vi/default/hqdefault.jpg';
+         let title = 'Vídeo do YouTube';
+         let thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 
-         if (videoId) {
+         try {
             const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
             const data = await res.json();
             title = data.title || title;
-            thumbnail = data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/0.jpg`;
-         }
+            thumbnail = data.thumbnail_url || thumbnail;
+         } catch(e) {}
          
          onSetMusic({
             videoId: videoId,
-            playlistId: playlistId,
-            title: title + (playlistId ? ' (Playlist)' : ''),
+            title: title,
             thumbnail: thumbnail,
             isPlaying: true,
             volume: 50
@@ -135,7 +125,7 @@ const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
       onSetMusic({ volume: Number(e.target.value) });
    };
 
-   const hasActiveMedia = musicState.videoId || musicState.playlistId;
+   const hasActiveMedia = !!musicState.videoId;
 
    return (
       <div className="bg-white rounded-xl shadow-card border border-slate-200 p-5 mt-6">
@@ -159,11 +149,10 @@ const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
                         ) : (
                            <span className="text-slate-400 font-medium">Pausado</span>
                         )}
-                        {musicState.playlistId && <span className="ml-2 text-brand-600 font-bold px-2 py-0.5 bg-brand-50 rounded-full text-[10px]">PLAYLIST</span>}
                      </p>
                   </div>
                   <button 
-                     onClick={() => onSetMusic({ videoId: null, playlistId: null, isPlaying: false })}
+                     onClick={() => onSetMusic({ videoId: null, isPlaying: false })}
                      className="p-2 bg-red-50 hover:bg-red-100 rounded-full text-red-600 transition-colors"
                      title="Parar e Remover"
                   >
@@ -172,11 +161,7 @@ const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
                </div>
 
                {/* Remote Controls */}
-               <div className="grid grid-cols-3 gap-3">
-                    <button onClick={() => onCommand('prev')} className="flex items-center justify-center p-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold active:scale-95 transition-all">
-                        <SkipBack className="w-6 h-6" />
-                    </button>
-                    
+               <div className="grid grid-cols-1 gap-3">
                     <button 
                         onClick={() => {
                             if (musicState.isPlaying) onCommand('pause');
@@ -184,11 +169,7 @@ const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
                         }} 
                         className={`flex items-center justify-center p-4 rounded-xl shadow-md active:scale-95 transition-all ${musicState.isPlaying ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' : 'bg-green-600 text-white hover:bg-green-700'}`}
                     >
-                        {musicState.isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8" />}
-                    </button>
-
-                    <button onClick={() => onCommand('next')} className="flex items-center justify-center p-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold active:scale-95 transition-all">
-                        <SkipForward className="w-6 h-6" />
+                        {musicState.isPlaying ? <span className="flex items-center gap-2 font-bold"><Pause className="w-5 h-5" /> PAUSAR</span> : <span className="flex items-center gap-2 font-bold"><Play className="w-5 h-5" /> TOCAR</span>}
                     </button>
                </div>
                
@@ -212,7 +193,7 @@ const MusicController = ({ musicState, onSetMusic, onCommand }: any) => {
                   type="text" 
                   value={url}
                   onChange={e => setUrl(e.target.value)}
-                  placeholder="Cole o link do YouTube (Vídeo ou Playlist)..."
+                  placeholder="Cole o link do YouTube..."
                   className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-500 outline-none"
                />
                <button 
