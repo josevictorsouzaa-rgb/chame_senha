@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { QueueState, User, AuthResponse, LoginPayload } from '../types';
+import { QueueState, User, AuthResponse, LoginPayload, AnalyticsData } from '../types';
 
 const SERVER_URL = 'http://localhost:3001';
 
@@ -98,6 +98,12 @@ export const useQueueSocket = () => {
     if (socketRef.current?.connected) socketRef.current.emit('setTicketNumber', number);
   }, []);
 
+  const getAnalytics = useCallback((callback: (data: AnalyticsData) => void) => {
+    if (socketRef.current?.connected && currentUser) {
+      socketRef.current.emit('getAnalytics', currentUser.id, callback);
+    }
+  }, [currentUser]);
+
   return {
     isConnected,
     queueState,
@@ -110,7 +116,8 @@ export const useQueueSocket = () => {
       callSpecific,
       recallCurrent,
       revertPrevious,
-      setTicketNumber
+      setTicketNumber,
+      getAnalytics
     }
   };
 };

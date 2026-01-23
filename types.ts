@@ -41,6 +41,21 @@ export interface LoginPayload {
   desk: string;
 }
 
+// New Analytics Interface
+export interface AnalyticsData {
+  store: {
+    totalCalls: number; // All time in DB
+    busiestDay: { date: string; count: number };
+    callsToday: number;
+  };
+  user: {
+    totalAnnual: number; // Current Year
+    totalMonth: number; // Current Month
+    bestDay: { date: string; count: number };
+    monthlyHistory: { month: string; count: number }[]; // For Chart
+  };
+}
+
 export interface ClientEvents {
   'login': (creds: LoginPayload, callback: (res: AuthResponse) => void) => void;
   'callNext': (userId: string) => void;
@@ -48,6 +63,7 @@ export interface ClientEvents {
   'recall': () => void;
   'revert': () => void;
   'setTicketNumber': (number: number) => void; // New: Manual sync
+  'getAnalytics': (userId: string, callback: (data: AnalyticsData) => void) => void;
 }
 
 export interface SocketEvents {
